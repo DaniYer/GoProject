@@ -27,6 +27,9 @@ func (a *Links) Shortener(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Удаление лишних пробелов и символов новой строки
+	originalURL = strings.TrimSpace(originalURL)
+
 	// Генерация уникального ID для сокращенного URL
 	id := generateID()
 
