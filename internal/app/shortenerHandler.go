@@ -69,7 +69,7 @@ func (a *Links) ShortenerLink(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Перенаправление на оригинальный URL
-	http.Redirect(w, r, originalURL, http.StatusFound) // Код 307 (Temporary Redirect)
+	http.Redirect(w, r, originalURL, http.StatusTemporaryRedirect) // Код 307 (Temporary Redirect)
 }
 
 // Функция для извлечения ID из URL
