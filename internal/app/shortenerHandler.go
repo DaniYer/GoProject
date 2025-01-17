@@ -38,6 +38,7 @@ func (a *Links) Shortener(w http.ResponseWriter, r *http.Request) {
 
 	// Создание сокращенной ссылки
 	smallURL := fmt.Sprintf("http://localhost:8080/%s", id)
+	smallURL = strings.TrimSpace(smallURL) // Убираем возможные символы новой строки
 
 	// Отправка ответа с сокращенным URL
 	w.Header().Set("Content-Type", "text/plain")
