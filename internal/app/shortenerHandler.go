@@ -15,7 +15,7 @@ type Links struct {
 // Обработчик для сокращения URL (POST /)
 func (a *Links) Shortener(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		http.Error(w, "Invalid request method", http.StatusBadRequest)
 		return
 	}
 
@@ -54,12 +54,13 @@ func generateID() string {
 // Обработчик для перенаправления по сокращенному URL (GET /{id})
 func (a *Links) ShortenerLink(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		http.Error(w, "Invalid request method", http.StatusBadRequest)
 		return
 	}
 
 	// Извлечение ID из URL
 	id := getIDFromURL(r.URL.Path)
+	fmt.Println(id)
 
 	// Проверка наличия URL в хранилище
 	originalURL, exists := a.storage[id]
