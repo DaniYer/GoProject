@@ -28,6 +28,7 @@ func NewURLShortener() *URLShortener {
 	}
 }
 
+// Генерация случайного идентификатора
 func (s *URLShortener) generateID() string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	const idLength = 8
@@ -39,7 +40,13 @@ func (s *URLShortener) generateID() string {
 	return sb.String()
 }
 
+// Обработчик для POST-запросов
 func (s *URLShortener) shortenURLHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil || len(body) == 0 {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -63,6 +70,7 @@ func (s *URLShortener) shortenURLHandler(w http.ResponseWriter, r *http.Request)
 	_, _ = w.Write([]byte(shortenedURL))
 }
 
+// Обработчик для GET-запросов
 func (s *URLShortener) resolveURLHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
@@ -88,11 +96,8 @@ func main() {
 	shortener := NewURLShortener()
 	r := mux.NewRouter()
 
+	// Настройка маршрутов
 	r.HandleFunc("/", shortener.shortenURLHandler).Methods(http.MethodPost)
-	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-	}).Methods(http.MethodGet, http.MethodPut, http.MethodDelete)
-
 	r.HandleFunc("/{id}", shortener.resolveURLHandler).Methods(http.MethodGet)
 
 	fmt.Println("Server is running at http://localhost:8080")
