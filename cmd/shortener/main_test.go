@@ -119,3 +119,4 @@ func TestResolveURLHandler(t *testing.T) {
 			}
 		})
 	}
+}
