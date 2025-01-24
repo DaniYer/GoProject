@@ -39,7 +39,6 @@ func (s *URLShortener) generateID() string {
 	return sb.String()
 }
 
-// Handler for shortening URL
 func (s *URLShortener) shortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil || len(body) == 0 {
@@ -64,7 +63,6 @@ func (s *URLShortener) shortenURLHandler(w http.ResponseWriter, r *http.Request)
 	_, _ = w.Write([]byte(shortenedURL))
 }
 
-// Handler for resolving URL
 func (s *URLShortener) resolveURLHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
@@ -88,15 +86,15 @@ func (s *URLShortener) resolveURLHandler(w http.ResponseWriter, r *http.Request)
 
 func main() {
 	shortener := NewURLShortener()
-
-	// Create a new router
 	r := mux.NewRouter()
 
-	// Define routes
 	r.HandleFunc("/", shortener.shortenURLHandler).Methods(http.MethodPost)
+	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+	}).Methods(http.MethodGet, http.MethodPut, http.MethodDelete)
+
 	r.HandleFunc("/{id}", shortener.resolveURLHandler).Methods(http.MethodGet)
 
-	// Start the server
 	fmt.Println("Server is running at http://localhost:8080")
 	if err := http.ListenAndServe(":8080", r); err != nil {
 		fmt.Println("Error starting server:", err)
