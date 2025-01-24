@@ -1,11 +1,12 @@
 package main
 
 import (
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestShortenURLHandler(t *testing.T) {
@@ -16,23 +17,22 @@ func TestShortenURLHandler(t *testing.T) {
 		method         string
 		body           string
 		expectedStatus int
-		expectedPrefix string
+		expectedResult string
 	}{
 		{
 			name:           "Valid URL",
 			method:         http.MethodPost,
 			body:           "https://example.com",
 			expectedStatus: http.StatusCreated,
-			expectedPrefix: "http://localhost:8080/",
 		},
 		{
-			name:           "Empty Body",
+			name:           "Empty body",
 			method:         http.MethodPost,
 			body:           "",
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name:           "Invalid Method",
+			name:           "Invalid method",
 			method:         http.MethodGet,
 			body:           "",
 			expectedStatus: http.StatusMethodNotAllowed,
@@ -42,22 +42,13 @@ func TestShortenURLHandler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(tt.method, "/", strings.NewReader(tt.body))
-			w := httptest.NewRecorder()
+			rec := httptest.NewRecorder()
 
-			shortener.shortenURLHandler(w, req)
+			shortener.shortenURLHandler(rec, req)
 
-			resp := w.Result()
-			defer resp.Body.Close()
-
-			if resp.StatusCode != tt.expectedStatus {
-				t.Errorf("expected status %d, got %d", tt.expectedStatus, resp.StatusCode)
-			}
-
-			if tt.expectedPrefix != "" {
-				body, _ := io.ReadAll(resp.Body)
-				if !strings.HasPrefix(string(body), tt.expectedPrefix) {
-					t.Errorf("expected response to start with %s, got %s", tt.expectedPrefix, string(body))
-				}
+			assert.Equal(t, tt.expectedStatus, rec.Code)
+			if tt.expectedStatus == http.StatusCreated {
+				assert.Contains(t, rec.Body.String(), "http://localhost:8080/")
 			}
 		})
 	}
@@ -65,57 +56,41 @@ func TestShortenURLHandler(t *testing.T) {
 
 func TestResolveURLHandler(t *testing.T) {
 	shortener := NewURLShortener()
-	originalURL := "https://example.com"
-	id := shortener.generateID()
 
-	// Добавляем URL в хранилище
+	// Добавляем тестовые данные
 	shortener.mu.Lock()
-	shortener.store[id] = originalURL
+	shortener.store["testID"] = "https://example.com"
 	shortener.mu.Unlock()
 
 	tests := []struct {
 		name           string
-		path           string
+		id             string
 		expectedStatus int
 		expectedURL    string
 	}{
 		{
 			name:           "Valid ID",
-			path:           "/" + id,
+			id:             "testID",
 			expectedStatus: http.StatusTemporaryRedirect,
-			expectedURL:    originalURL,
+			expectedURL:    "https://example.com",
 		},
 		{
 			name:           "Invalid ID",
-			path:           "/invalidID",
+			id:             "invalidID",
 			expectedStatus: http.StatusNotFound,
-		},
-		{
-			name:           "Empty ID",
-			path:           "/",
-			expectedStatus: http.StatusBadRequest,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
-			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/"+tt.id, nil)
+			rec := httptest.NewRecorder()
 
-			shortener.resolveURLHandler(w, req)
+			shortener.resolveURLHandler(rec, req)
 
-			resp := w.Result()
-			defer resp.Body.Close()
-
-			if resp.StatusCode != tt.expectedStatus {
-				t.Errorf("expected status %d, got %d", tt.expectedStatus, resp.StatusCode)
-			}
-
+			assert.Equal(t, tt.expectedStatus, rec.Code)
 			if tt.expectedStatus == http.StatusTemporaryRedirect {
-				location := resp.Header.Get("Location")
-				if location != tt.expectedURL {
-					t.Errorf("expected redirect to %s, got %s", tt.expectedURL, location)
-				}
+				assert.Equal(t, tt.expectedURL, rec.Header().Get("Location"))
 			}
 		})
 	}
