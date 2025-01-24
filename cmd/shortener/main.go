@@ -5,10 +5,11 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gorilla/mux"
 )
 
 type URLShortener struct {
@@ -18,7 +19,6 @@ type URLShortener struct {
 }
 
 func NewURLShortener() *URLShortener {
-	// Создаём новый локальный генератор случайных чисел
 	source := rand.NewSource(time.Now().UnixNano())
 	rng := rand.New(source)
 
@@ -39,12 +39,8 @@ func (s *URLShortener) generateID() string {
 	return sb.String()
 }
 
+// Handler for shortening URL
 func (s *URLShortener) shortenURLHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	body, err := io.ReadAll(r.Body)
 	if err != nil || len(body) == 0 {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -68,8 +64,11 @@ func (s *URLShortener) shortenURLHandler(w http.ResponseWriter, r *http.Request)
 	_, _ = w.Write([]byte(shortenedURL))
 }
 
+// Handler for resolving URL
 func (s *URLShortener) resolveURLHandler(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/")
+	vars := mux.Vars(r)
+	id := vars["id"]
+
 	if id == "" {
 		http.Error(w, "ID not provided", http.StatusBadRequest)
 		return
@@ -90,17 +89,16 @@ func (s *URLShortener) resolveURLHandler(w http.ResponseWriter, r *http.Request)
 func main() {
 	shortener := NewURLShortener()
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			shortener.shortenURLHandler(w, r)
-		} else {
-			shortener.resolveURLHandler(w, r)
-		}
-	})
+	// Create a new router
+	r := mux.NewRouter()
 
+	// Define routes
+	r.HandleFunc("/", shortener.shortenURLHandler).Methods(http.MethodPost)
+	r.HandleFunc("/{id}", shortener.resolveURLHandler).Methods(http.MethodGet)
+
+	// Start the server
 	fmt.Println("Server is running at http://localhost:8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	if err := http.ListenAndServe(":8080", r); err != nil {
 		fmt.Println("Error starting server:", err)
-		os.Exit(1)
 	}
 }
