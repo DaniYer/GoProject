@@ -34,15 +34,15 @@ func shortenedURL(w http.ResponseWriter, r *http.Request) {
 	url := string(body)
 
 	// Генерация уникального идентификатора
-	genId := genSym()
+	genID := genSym()
 
 	// Сохранение в мапу
-	storage[genId] = url
+	storage[genID] = url
 
 	// Отправка ответа с сокращенным URL
 	w.WriteHeader(201)
 	w.Header().Set("Content-Type", "text/plain")
-	w.Write([]byte("http://localhost:8080/" + genId))
+	w.Write([]byte("http://localhost:8080/" + genID))
 }
 
 func redirectedURL(w http.ResponseWriter, r *http.Request) {
