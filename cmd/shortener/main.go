@@ -28,7 +28,7 @@ func writeDate(w http.ResponseWriter, r *http.Request) {
 	genId := generateShortUrl()
 	defer r.Body.Close()
 	body, err := io.ReadAll(r.Body)
-	if string(body) == "" || err != nil {
+	if err != nil {
 		http.Error(w, "Cannot read Body", 400)
 	}
 	storage[genId] = strings.Trim(strings.Trim(string(body), "\n"), "\r")
@@ -50,7 +50,7 @@ func redirectedHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Undefiend ID", 400)
 	}
 
-	http.Redirect(w, r, data, http.StatusTemporaryRedirect)
+	http.Redirect(w, r, data, http.StatusMovedPermanently)
 
 }
 
