@@ -24,21 +24,22 @@ func writeDate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Incorrect Method", 400)
 	}
 
-	genId := generateShortURL()
+	genID := generateShortURL()
 	defer r.Body.Close()
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Cannot read Body", 400)
 	}
-	storage[genId] = string(body)
+	storage[genID] = string(body)
 	//strings.Trim(strings.Trim(string(body), "\n"), "\r")
 	w.Header().Set("content-type", "text/plain")
 	w.WriteHeader(201)
-	w.Write([]byte("localhost:8080/" + genId))
+	w.Write([]byte("localhost:8080/" + genID))
 
 }
 
 func redirectedHandler(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
 	if r.Method != http.MethodGet {
 		http.Error(w, "Incorrect Method", 400)
 	}
