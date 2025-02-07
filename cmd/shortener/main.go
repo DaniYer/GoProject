@@ -22,14 +22,16 @@ func main() {
 func writeDate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Incorrect Method", 400)
+		return
 	}
 
 	genID := generateShortURL()
-	defer r.Body.Close()
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Cannot read Body", 400)
 	}
+	defer r.Body.Close()
+
 	storage[genID] = string(body)
 	//strings.Trim(strings.Trim(string(body), "\n"), "\r")
 	w.Header().Set("content-type", "text/plain")
@@ -39,9 +41,9 @@ func writeDate(w http.ResponseWriter, r *http.Request) {
 }
 
 func redirectedHandler(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
 	if r.Method != http.MethodGet {
 		http.Error(w, "Incorrect Method", 400)
+		return
 	}
 	getURLID := string(r.URL.Path)[1:]
 
