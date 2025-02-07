@@ -27,7 +27,7 @@ func writeDate(w http.ResponseWriter, r *http.Request) {
 
 	genID := generateShortURL()
 	body, err := io.ReadAll(r.Body)
-	if err != nil {
+	if err != nil || len(body) == 0 {
 		http.Error(w, "Cannot read Body", 400)
 	}
 	defer r.Body.Close()
@@ -35,7 +35,7 @@ func writeDate(w http.ResponseWriter, r *http.Request) {
 	storage[genID] = string(body)
 	//strings.Trim(strings.Trim(string(body), "\n"), "\r")
 	w.WriteHeader(201)
-	w.Header().Set("content-type", "text/plain")
+	w.Header().Set("Content-Type", "text/plain")
 	w.Write([]byte("localhost:8080/" + genID))
 
 }
