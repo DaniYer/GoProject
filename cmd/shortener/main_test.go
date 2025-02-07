@@ -69,7 +69,7 @@ func Test_redirectedHandler(t *testing.T) {
 			name: "Pos Request",
 			id:   "1111111",
 
-			want: want{307, "GET"},
+			want: want{301, "GET"},
 		},
 	}
 	for _, tt := range tests {

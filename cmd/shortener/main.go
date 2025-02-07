@@ -50,7 +50,7 @@ func redirectedHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Undefiend ID", 400)
 	}
 
-	http.Redirect(w, r, data, 307)
+	http.Redirect(w, r, data, http.StatusTemporaryRedirect)
 
 }
 
