@@ -6,9 +6,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	// "github.com/stretchr/testify/assert"
 )
 
-func Test_writeDate(t *testing.T) {
+func Test_shortenedURL(t *testing.T) {
 
 	type want struct {
 		code   int
@@ -44,7 +45,7 @@ func Test_writeDate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := httptest.NewRequest(tt.want.method, "localhost:8080", strings.NewReader(tt.want.body))
 			w := httptest.NewRecorder()
-			writeDate(w, r)
+			shortenedURL(w, r)
 			res := w.Result()
 			assert.Equal(t, tt.want.code, res.StatusCode)
 
@@ -52,7 +53,7 @@ func Test_writeDate(t *testing.T) {
 	}
 }
 
-func Test_redirectedHandler(t *testing.T) {
+func Test_redirectedURL(t *testing.T) {
 
 	type want struct {
 		code int
@@ -77,7 +78,7 @@ func Test_redirectedHandler(t *testing.T) {
 			storage[tt.id] = "expample.com"
 			r := httptest.NewRequest(tt.want.method, "/"+tt.id, nil)
 			w := httptest.NewRecorder()
-			redirectedHandler(w, r)
+			redirectedURL(w, r)
 			res := w.Result()
 			assert.Equal(t, tt.want.code, res.StatusCode)
 		})
