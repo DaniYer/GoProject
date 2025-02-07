@@ -34,8 +34,8 @@ func writeDate(w http.ResponseWriter, r *http.Request) {
 
 	storage[genID] = string(body)
 	//strings.Trim(strings.Trim(string(body), "\n"), "\r")
-	w.Header().Set("content-type", "text/plain")
 	w.WriteHeader(201)
+	w.Header().Set("content-type", "text/plain")
 	w.Write([]byte("localhost:8080/" + genID))
 
 }
@@ -51,10 +51,11 @@ func redirectedHandler(w http.ResponseWriter, r *http.Request) {
 
 	if !exist {
 		http.Error(w, "Undefiend ID", 400)
+		return
 	}
 
 	http.Redirect(w, r, data, http.StatusMovedPermanently)
-
+	w.Header().Set("Content-Type", "text/plain")
 }
 
 func generateShortURL() string {
