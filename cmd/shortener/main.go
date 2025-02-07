@@ -24,7 +24,7 @@ func writeDate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Incorrect Method", 400)
 	}
 
-	genId := generateShortUrl()
+	genId := generateShortURL()
 	defer r.Body.Close()
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -42,9 +42,9 @@ func redirectedHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Incorrect Method", 400)
 	}
-	getUrlId := string(r.URL.Path)[1:]
+	getURLID := string(r.URL.Path)[1:]
 
-	data, exist := storage[getUrlId]
+	data, exist := storage[getURLID]
 
 	if !exist {
 		http.Error(w, "Undefiend ID", 400)
@@ -54,6 +54,6 @@ func redirectedHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func generateShortUrl() string {
+func generateShortURL() string {
 	return uuid.New().String()[:7]
 }
