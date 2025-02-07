@@ -44,6 +44,7 @@ func Test_writeDate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := httptest.NewRequest(tt.want.method, "localhost:8080", strings.NewReader(tt.want.body))
+			defer r.Body.Close()
 			w := httptest.NewRecorder()
 			writeDate(w, r)
 			res := w.Result()
@@ -77,6 +78,7 @@ func Test_redirectedHandler(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			storage[tt.id] = "expample.com"
 			r := httptest.NewRequest(tt.want.method, "/"+tt.id, nil)
+			defer r.Body.Close()
 			w := httptest.NewRecorder()
 			redirectedHandler(w, r)
 			res := w.Result()
