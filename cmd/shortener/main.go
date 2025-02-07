@@ -1,81 +1,59 @@
 package main
 
 import (
-	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
+	"strings"
+
+	"github.com/google/uuid"
 )
 
 var storage = map[string]string{}
 
 func main() {
-	http.HandleFunc("/", shortenedURL)      // Обработка POST запроса на сокращение URL
-	http.HandleFunc("/{id}", redirectedURL) // Обработка GET запроса на редирект
-	fmt.Println("localhost:8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", writeDate)
+	mux.HandleFunc("/{id}", redirectedHandler)
+
+	if err := http.ListenAndServe(":8080", mux); err != nil {
 		panic(err)
 	}
 }
 
-func shortenedURL(w http.ResponseWriter, r *http.Request) {
-	// Только POST запросы
+func writeDate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Unresolved method", 400)
-		return
+		http.Error(w, "Incorrect Method", 400)
 	}
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil || len(body) == 0 {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
+	genId := generateShortUrl()
 	defer r.Body.Close()
-	url := string(body)
-
-	// Генерация уникального идентификатора
-	genID := genSym()
-
-	// Сохранение в мапу
-	storage[genID] = url
-
-	// Отправка ответа с сокращенным URL
+	body, err := io.ReadAll(r.Body)
+	if string(body) == "" || err != nil {
+		http.Error(w, "Cannot read Body", 400)
+	}
+	storage[genId] = strings.Trim(strings.Trim(string(body), "\n"), "\r")
+	w.Header().Set("content-type", "text/plain")
 	w.WriteHeader(201)
-	w.Header().Set("Content-Type", "text/plain")
-	w.Write([]byte("http://localhost:8080/" + genID))
+	w.Write([]byte("localhost:8080/" + genId))
+
 }
 
-func redirectedURL(w http.ResponseWriter, r *http.Request) {
-	// Только GET запросы
+func redirectedHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Unresolved method", 400)
-		return
+		http.Error(w, "Incorrect Method", 400)
+	}
+	getUrlId := string(r.URL.Path)[1:]
+
+	data, exist := storage[getUrlId]
+
+	if !exist {
+		http.Error(w, "Undefiend ID", 400)
 	}
 
-	// Извлечение идентификатора из пути
-	id := r.URL.Path[1:]
+	http.Redirect(w, r, data, 307)
 
-	if id == "" {
-		http.Error(w, "Empty path or not found", 400)
-		return
-	}
-
-	// Поиск в мапе
-	value, exists := storage[id]
-	if !exists {
-		http.Error(w, "URL not found", 400)
-		return
-	}
-
-	// Редирект на оригинальный URL
-	http.Redirect(w, r, value, http.StatusTemporaryRedirect)
-	w.Header().Set("Content-Type", "text/plain")
 }
 
-func genSym() string {
-	result := ""
-	for i := 0; i < 8; i++ {
-		result += string(rune(rand.Intn(26) + 'a')) // Генерация случайных символов
-	}
-	return result
+func generateShortUrl() string {
+	return uuid.New().String()[:7]
 }
