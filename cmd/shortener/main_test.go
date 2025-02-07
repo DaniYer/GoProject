@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	// "github.com/stretchr/testify/assert"
 )
 
 func Test_shortenedURL(t *testing.T) {
@@ -48,6 +47,7 @@ func Test_shortenedURL(t *testing.T) {
 			shortenedURL(w, r)
 			res := w.Result()
 			assert.Equal(t, tt.want.code, res.StatusCode)
+			res.Body.Close()
 
 		})
 	}
@@ -81,6 +81,8 @@ func Test_redirectedURL(t *testing.T) {
 			redirectedURL(w, r)
 			res := w.Result()
 			assert.Equal(t, tt.want.code, res.StatusCode)
+			res.Body.Close()
+
 		})
 	}
 }
