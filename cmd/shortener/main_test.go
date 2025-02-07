@@ -21,11 +21,10 @@ func Test_writeDate(t *testing.T) {
 		name string
 		want want
 	}{
-		// TODO: Add test cases.
 		{name: "positive test",
 			want: want{
 				code:   201,
-				body:   "https://practicum.yandex.ru/",
+				body:   "localhost:8080/1111111", // Пример правильного ответа, который возвращает сервер
 				method: "POST",
 			}},
 		{name: "Empty Body",
@@ -43,13 +42,18 @@ func Test_writeDate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := httptest.NewRequest(tt.want.method, "localhost:8080", strings.NewReader(tt.want.body))
-			defer r.Body.Close()
+			r := httptest.NewRequest(tt.want.method, "/", strings.NewReader(tt.want.body))
 			w := httptest.NewRecorder()
 			writeDate(w, r)
 			res := w.Result()
-			assert.Equal(t, tt.want.code, res.StatusCode)
 
+			assert.Equal(t, tt.want.code, res.StatusCode)
+			// Если нужно, добавьте проверку тела ответа
+			if tt.want.code == 201 {
+				expectedBody := "localhost:8080/1111111"
+				actualBody := w.Body.String()
+				assert.Equal(t, expectedBody, actualBody)
+			}
 		})
 	}
 }
@@ -57,8 +61,7 @@ func Test_writeDate(t *testing.T) {
 func Test_redirectedHandler(t *testing.T) {
 
 	type want struct {
-		code int
-
+		code   int
 		method string
 	}
 	tests := []struct {
@@ -66,23 +69,30 @@ func Test_redirectedHandler(t *testing.T) {
 		id   string
 		want want
 	}{
-		// TODO: Add test cases.
 		{
 			name: "Pos Request",
 			id:   "1111111",
-
-			want: want{http.StatusMovedPermanently, "GET"},
+			want: want{
+				code:   http.StatusMovedPermanently,
+				method: "GET",
+			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			storage[tt.id] = "expample.com"
+			// Добавьте запись в storage перед тестом
+			storage[tt.id] = "https://example.com"
 			r := httptest.NewRequest(tt.want.method, "/"+tt.id, nil)
-			defer r.Body.Close()
 			w := httptest.NewRecorder()
 			redirectedHandler(w, r)
 			res := w.Result()
+
 			assert.Equal(t, tt.want.code, res.StatusCode)
+
+			// Если нужно, добавьте проверку редиректа
+			expectedLocation := "https://example.com"
+			location := res.Header.Get("Location")
+			assert.Equal(t, expectedLocation, location)
 		})
 	}
 }
