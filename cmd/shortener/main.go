@@ -3,7 +3,6 @@ package main
 import (
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/google/uuid"
 )
@@ -31,7 +30,8 @@ func writeDate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Cannot read Body", 400)
 	}
-	storage[genId] = strings.Trim(strings.Trim(string(body), "\n"), "\r")
+	storage[genId] = string(body)
+	//strings.Trim(strings.Trim(string(body), "\n"), "\r")
 	w.Header().Set("content-type", "text/plain")
 	w.WriteHeader(201)
 	w.Write([]byte("localhost:8080/" + genId))
