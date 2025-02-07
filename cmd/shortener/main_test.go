@@ -45,10 +45,10 @@ func Test_writeDate(t *testing.T) {
 			r := httptest.NewRequest(tt.want.method, "localhost:8080", strings.NewReader(tt.want.body))
 			w := httptest.NewRecorder()
 			writeDate(w, r)
-			res := w.Result() // Записываем результат
-			// Закрывать респонс не нужно! Достаточно только закрыть тело запроса:
-			// defer r.Body.Close() остается.
+			res := w.Result()
+			res.Body.Close()
 			assert.Equal(t, tt.want.code, res.StatusCode)
+
 		})
 	}
 }
@@ -81,6 +81,8 @@ func Test_redirectedHandler(t *testing.T) {
 			w := httptest.NewRecorder()
 			redirectedHandler(w, r)
 			res := w.Result()
+			res.Body.Close()
+
 			// Здесь также не нужно закрывать res.Body
 			// defer r.Body.Close() — это важно, так как респонс не требует закрытия
 			assert.Equal(t, tt.want.code, res.StatusCode)
