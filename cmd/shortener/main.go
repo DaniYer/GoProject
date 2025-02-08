@@ -5,15 +5,18 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+
+	"github.com/go-chi/chi/v5"
 )
 
 var storage = map[string]string{}
 
 func main() {
-	http.HandleFunc("/", shortenedURL)      // Обработка POST запроса на сокращение URL
-	http.HandleFunc("/{id}", redirectedURL) // Обработка GET запроса на редирект
+	r := chi.NewRouter()
+	r.Post("/", shortenedURL)
+	r.Get("/{id}", redirectedURL)
 	fmt.Println("localhost:8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	if err := http.ListenAndServe(":8080", r); err != nil {
 		panic(err)
 	}
 }
