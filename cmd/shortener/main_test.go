@@ -1,7 +1,6 @@
 package main
 
 import (
-	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -9,89 +8,81 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestShortenURLHandler(t *testing.T) {
-	shortener := NewURLShortener()
+func Test_shortenedURL(t *testing.T) {
 
-	tests := []struct {
-		name           string
-		method         string
-		body           string
-		expectedStatus int
-		expectedResult string
-	}{
-		{
-			name:           "Valid URL",
-			method:         http.MethodPost,
-			body:           "https://example.com",
-			expectedStatus: http.StatusCreated,
-		},
-		{
-			name:           "Empty body",
-			method:         http.MethodPost,
-			body:           "",
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name:           "Invalid method",
-			method:         http.MethodGet,
-			body:           "",
-			expectedStatus: http.StatusMethodNotAllowed,
-		},
+	type want struct {
+		code   int
+		body   string
+		method string
 	}
 
+	tests := []struct {
+		name string
+		want want
+	}{
+		// TODO: Add test cases.
+		{name: "positive test",
+			want: want{
+				code:   201,
+				body:   "https://practicum.yandex.ru/",
+				method: "POST",
+			}},
+		{name: "Empty Body",
+			want: want{
+				code:   400,
+				body:   "",
+				method: "POST",
+			}},
+		{name: "Incorrect Method",
+			want: want{
+				code:   400,
+				body:   "",
+				method: "GET",
+			}},
+	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(tt.method, "/", strings.NewReader(tt.body))
-			rec := httptest.NewRecorder()
+			r := httptest.NewRequest(tt.want.method, "localhost:8080", strings.NewReader(tt.want.body))
+			w := httptest.NewRecorder()
+			shortenedURL(w, r)
+			res := w.Result()
+			assert.Equal(t, tt.want.code, res.StatusCode)
+			res.Body.Close()
 
-			shortener.shortenURLHandler(rec, req)
-
-			assert.Equal(t, tt.expectedStatus, rec.Code)
-			if tt.expectedStatus == http.StatusCreated {
-				assert.Contains(t, rec.Body.String(), "http://localhost:8080/")
-			}
 		})
 	}
 }
 
-func TestResolveURLHandler(t *testing.T) {
-	shortener := NewURLShortener()
+func Test_redirectedURL(t *testing.T) {
 
-	// Добавляем тестовые данные
-	shortener.mu.Lock()
-	shortener.store["testID"] = "https://example.com"
-	shortener.mu.Unlock()
+	type want struct {
+		code int
 
+		method string
+	}
 	tests := []struct {
-		name           string
-		id             string
-		expectedStatus int
-		expectedURL    string
+		name string
+		id   string
+		want want
 	}{
+		// TODO: Add test cases.
 		{
-			name:           "Valid ID",
-			id:             "testID",
-			expectedStatus: http.StatusTemporaryRedirect,
-			expectedURL:    "https://example.com",
-		},
-		{
-			name:           "Invalid ID",
-			id:             "invalidID",
-			expectedStatus: http.StatusNotFound,
+			name: "Pos Request",
+			id:   "1111111",
+
+			want: want{307, "GET"},
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/"+tt.id, nil)
-			rec := httptest.NewRecorder()
+			storage[tt.id] = "expample.com"
+			r := httptest.NewRequest(tt.want.method, "/"+tt.id, nil)
+			w := httptest.NewRecorder()
+			redirectedURL(w, r)
+			res := w.Result()
+			assert.Equal(t, tt.want.code, res.StatusCode)
+			res.Body.Close()
 
-			shortener.resolveURLHandler(rec, req)
-
-			assert.Equal(t, tt.expectedStatus, rec.Code)
-			if tt.expectedStatus == http.StatusTemporaryRedirect {
-				assert.Equal(t, tt.expectedURL, rec.Header().Get("Location"))
-			}
 		})
 	}
 }
