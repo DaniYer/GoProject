@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DaniYer/GoProject.git/internal/app/config"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -44,7 +45,8 @@ func Test_shortenedURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := httptest.NewRequest(tt.want.method, "localhost:8080", strings.NewReader(tt.want.body))
 			w := httptest.NewRecorder()
-			shortenedURL(w, r)
+			cfg := config.NewConfig()
+			shortenedURL(w, r, cfg)
 			res := w.Result()
 			assert.Equal(t, tt.want.code, res.StatusCode)
 			res.Body.Close()
