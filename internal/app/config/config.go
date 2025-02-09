@@ -3,21 +3,27 @@ package config
 import (
 	"flag"
 	"fmt"
+
+	"github.com/caarlos0/env"
 )
 
 // Config структура для хранения конфигурации
 type Config struct {
-	ServerAddress string
+	ServerAddress string `env:"SERVER_ADDRESS" envDefault:"http://localhost:8080"`
 	BaseURL       string
 }
 
 // NewConfig функция для создания и парсинга конфигурации
 func NewConfig() *Config {
 	cfg := &Config{}
-	// Парсинг флагов
-	flag.StringVar(&cfg.ServerAddress, "a", "localhost:8080", "Адрес для запуска HTTP-сервера (например, localhost:8888)")
-	flag.StringVar(&cfg.BaseURL, "b", "http://localhost:8080", "Базовый адрес для сокращённых URL (например, http://localhost:8000)")
-	flag.Parse()
+	err := env.Parse(&cfg)
+	if err != nil {
+		// Парсинг флагов
+		flag.StringVar(&cfg.ServerAddress, "a", "localhost:8080", "Адрес для запуска HTTP-сервера (например, localhost:8888)")
+		flag.StringVar(&cfg.BaseURL, "b", "http://localhost:8080", "Базовый адрес для сокращённых URL (например, http://localhost:8000)")
+		flag.Parse()
+	}
+
 	return cfg
 }
 

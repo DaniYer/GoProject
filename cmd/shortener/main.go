@@ -13,6 +13,7 @@ import (
 var storage = map[string]string{}
 
 func main() {
+
 	// Получаем конфигурацию из пакета config
 	cfg := config.NewConfig()
 
