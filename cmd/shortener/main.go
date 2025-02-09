@@ -6,17 +6,23 @@ import (
 	"math/rand"
 	"net/http"
 
+	"github.com/DaniYer/GoProject.git/internal/app/config"
 	"github.com/go-chi/chi/v5"
 )
 
 var storage = map[string]string{}
 
 func main() {
+	// Получаем конфигурацию из пакета config
+	cfg := config.NewConfig()
+
+	// Выводим конфигурацию (для отладки)
+	cfg.Print()
 	r := chi.NewRouter()
 	r.Post("/", shortenedURL)
 	r.Get("/{id}", redirectedURL)
-	fmt.Println("localhost:8080")
-	if err := http.ListenAndServe(":8080", r); err != nil {
+	fmt.Println(cfg.ServerAddress)
+	if err := http.ListenAndServe(cfg.ServerAddress, r); err != nil {
 		panic(err)
 	}
 }
