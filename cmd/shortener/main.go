@@ -19,14 +19,16 @@ func main() {
 	// Выводим конфигурацию (для отладки)
 	cfg.Print()
 	r := chi.NewRouter()
-	r.Post("/", shortenedURL)
+	r.Post("/", func(w http.ResponseWriter, r *http.Request) {
+		shortenedURL(w, r, cfg)
+	})
 	r.Get("/{id}", redirectedURL)
 	fmt.Println(cfg.ServerAddress)
 	if err := http.ListenAndServe(cfg.ServerAddress, r); err != nil {
 		panic(err)
 	}
 }
-func shortenedURL(w http.ResponseWriter, r *http.Request) {
+func shortenedURL(w http.ResponseWriter, r *http.Request, cfg *config.Config) {
 	// Только POST запросы
 	if r.Method != http.MethodPost {
 		http.Error(w, "Unresolved method", 400)
@@ -49,7 +51,7 @@ func shortenedURL(w http.ResponseWriter, r *http.Request) {
 	// Отправка ответа с сокращенным URL
 	w.WriteHeader(201)
 	w.Header().Set("Content-Type", "text/plain")
-	w.Write([]byte("http://localhost:8080/" + genID))
+	w.Write([]byte(fmt.Sprintf("%s/%s", cfg.BaseURL, genID)))
 }
 
 func redirectedURL(w http.ResponseWriter, r *http.Request) {
