@@ -5,9 +5,27 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"time"
 
 	"github.com/DaniYer/GoProject.git/internal/app/config"
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
+)
+
+var sugar zap.SugaredLogger
+
+type (
+	// берём структуру для хранения сведений об ответе
+	responseData struct {
+		status int
+		size   int
+	}
+
+	// добавляем реализацию http.ResponseWriter
+	loggingResponseWriter struct {
+		http.ResponseWriter // встраиваем оригинальный http.ResponseWriter
+		responseData        *responseData
+	}
 )
 
 var storage = map[string]string{}
@@ -17,13 +35,17 @@ func main() {
 	// Получаем конфигурацию из пакета config
 	cfg := config.NewConfig()
 
+	logger, _ := zap.NewProduction()
+	defer logger.Sync() // Обязательно синхронизировать перед выходом
+	sugar = *logger.Sugar()
+
 	// Выводим конфигурацию (для отладки)
 	cfg.Print()
 	r := chi.NewRouter()
-	r.Post("/", func(w http.ResponseWriter, r *http.Request) {
+	r.Post("/", WithLogging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		shortenedURL(w, r, cfg.BaseURL)
-	})
-	r.Get("/{id}", redirectedURL)
+	})))
+	r.Get("/{id}", WithLogging(http.HandlerFunc(redirectedURL)))
 	fmt.Println(cfg.ServerAddress)
 	if err := http.ListenAndServe(cfg.ServerAddress, r); err != nil {
 		panic(err)
@@ -83,4 +105,32 @@ func genSym() string {
 		result += string(rune(rand.Intn(26) + 'a')) // Генерация случайных символов
 	}
 	return result
+}
+
+func WithLogging(h http.HandlerFunc) http.HandlerFunc {
+	logFn := func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		responseData := &responseData{
+			status: 0,
+			size:   0,
+		}
+		lw := loggingResponseWriter{
+			ResponseWriter: w, // встраиваем оригинальный http.ResponseWriter
+			responseData:   responseData,
+		}
+
+		h.ServeHTTP(&lw, r) // внедряем реализацию http.ResponseWriter
+
+		duration := time.Since(start)
+
+		sugar.Infoln(
+			"uri", r.RequestURI,
+			"method", r.Method,
+			"status", responseData.status, // получаем перехваченный код статуса ответа
+			"duration", duration,
+			"size", responseData.size, // получаем перехваченный размер ответа
+		)
+	}
+	return logFn
 }
