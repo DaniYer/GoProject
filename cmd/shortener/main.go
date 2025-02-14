@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -52,7 +51,10 @@ func main() {
 	})))
 	r.Get("/{id}", WithLogging(http.HandlerFunc(redirectedURL)))
 
-	r.Post("/api/shorten", jsonDecode)
+	r.Post("/api/shorten", WithLogging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiShortenHandler(w, r, cfg.BaseURL)
+	})))
+
 	fmt.Println(cfg.ServerAddress)
 	if err := http.ListenAndServe(cfg.ServerAddress, r); err != nil {
 		panic(err)
@@ -142,43 +144,29 @@ func WithLogging(h http.HandlerFunc) http.HandlerFunc {
 	return logFn
 }
 
-func jsonDecode(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Unresolved method", 400)
-		return
-	}
-
-	var url URL
-	var buf bytes.Buffer
-
-	_, err := buf.ReadFrom(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err = json.Unmarshal(buf.Bytes(), &url); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	result := mapBodyToID(storage)
-
-	resp, err := json.Marshal(result[url.URL])
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write(resp)
-
+type shortenRequest struct {
+	URL string `json:"url"`
 }
 
-func mapBodyToID(mapIDtoBody map[string]string) map[string]string {
-	mapBodyToID := make(map[string]string)
+type shortenResponse struct {
+	Result string `json:"result"`
+}
 
-	for id, body := range mapIDtoBody {
-		mapBodyToID[body] = id
+func apiShortenHandler(w http.ResponseWriter, r *http.Request, baseURL string) {
+	var req shortenRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
 	}
-	return mapBodyToID
+
+	genID := genSym()
+	storage[genID] = req.URL
+
+	resp := shortenResponse{
+		Result: baseURL + "/" + genID,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(resp)
 }
