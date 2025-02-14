@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
@@ -26,6 +28,9 @@ type (
 		http.ResponseWriter // встраиваем оригинальный http.ResponseWriter
 		responseData        *responseData
 	}
+	URL struct {
+		url string `json:"url"`
+	}
 )
 
 var storage = map[string]string{}
@@ -46,6 +51,8 @@ func main() {
 		shortenedURL(w, r, cfg.BaseURL)
 	})))
 	r.Get("/{id}", WithLogging(http.HandlerFunc(redirectedURL)))
+
+	r.Post("/api/shorten", jsonDecode)
 	fmt.Println(cfg.ServerAddress)
 	if err := http.ListenAndServe(cfg.ServerAddress, r); err != nil {
 		panic(err)
@@ -133,4 +140,45 @@ func WithLogging(h http.HandlerFunc) http.HandlerFunc {
 		)
 	}
 	return logFn
+}
+
+func jsonDecode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Unresolved method", 400)
+		return
+	}
+
+	var url URL
+	var buf bytes.Buffer
+
+	_, err := buf.ReadFrom(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err = json.Unmarshal(buf.Bytes(), &url); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	result := mapBodyToID(storage)
+
+	resp, err := json.Marshal(result[url.url])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(resp)
+
+}
+
+func mapBodyToID(mapIDtoBody map[string]string) map[string]string {
+	mapBodyToID := make(map[string]string)
+
+	for id, body := range mapIDtoBody {
+		mapBodyToID[body] = id
+	}
+	return mapBodyToID
 }
