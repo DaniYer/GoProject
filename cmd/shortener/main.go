@@ -29,7 +29,7 @@ type (
 		responseData        *responseData
 	}
 	URL struct {
-		Url string `json:"url"`
+		URL string `json:"url"`
 	}
 )
 
@@ -163,7 +163,7 @@ func jsonDecode(w http.ResponseWriter, r *http.Request) {
 	}
 	result := mapBodyToID(storage)
 
-	resp, err := json.Marshal(result[url.Url])
+	resp, err := json.Marshal(result[url.URL])
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
