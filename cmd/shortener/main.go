@@ -186,11 +186,13 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 
 func gzipHandle(next http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Проверяем, поддерживает ли клиент gzip
 		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 			next.ServeHTTP(w, r)
 			return
 		}
 
+		// Создаем gzip.Writer поверх оригинального ResponseWriter
 		gz, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
 		if err != nil {
 			http.Error(w, "Failed to create gzip writer", http.StatusInternalServerError)
@@ -198,17 +200,24 @@ func gzipHandle(next http.Handler) http.HandlerFunc {
 		}
 		defer gz.Close()
 
-		// Используем обёртку для ResponseWriter
-		gzWriter := gzipWriter{ResponseWriter: w, Writer: gz}
-
-		// Перехватываем статус для пропуска сжатия на редиректах
-		lw := &loggingResponseWriter{ResponseWriter: gzWriter, responseData: &responseData{}}
+		// Обертка для перехвата заголовков и статуса
+		lw := &loggingResponseWriter{
+			ResponseWriter: w,
+			responseData:   &responseData{},
+		}
 
 		next.ServeHTTP(lw, r)
 
-		// Если статус — редирект, выводим оригинальный заголовок без gzip
-		if lw.responseData.status >= 300 && lw.responseData.status < 400 {
-			w.Header().Del("Content-Encoding")
+		// Условие сжатия только для JSON и HTML
+		contentType := lw.Header().Get("Content-Type")
+		if lw.responseData.status < 300 && (strings.Contains(contentType, "application/json") || strings.Contains(contentType, "text/html")) {
+			w.Header().Set("Content-Encoding", "gzip")
+			w.Header().Del("Content-Length")
+			_, _ = gz.Write([]byte(lw.responseDataBody))
+		} else {
+			// Если контент не подлежит сжатию, отдаём как есть
+			w.WriteHeader(lw.responseData.status)
+			_, _ = w.Write([]byte(lw.responseDataBody))
 		}
 	}
 }
