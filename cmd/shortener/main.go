@@ -186,27 +186,29 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 
 func gzipHandle(next http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// проверяем, что клиент поддерживает gzip-сжатие
-		// это упрощённый пример. В реальном приложении следует проверять все
-		// значения r.Header.Values("Accept-Encoding") и разбирать строку
-		// на составные части, чтобы избежать неожиданных результатов
 		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-			// если gzip не поддерживается, передаём управление
-			// дальше без изменений
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// создаём gzip.Writer поверх текущего w
 		gz, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
 		if err != nil {
-			io.WriteString(w, err.Error())
+			http.Error(w, "Failed to create gzip writer", http.StatusInternalServerError)
 			return
 		}
 		defer gz.Close()
 
-		w.Header().Set("Content-Encoding", "gzip")
-		// передаём обработчику страницы переменную типа gzipWriter для вывода данных
-		next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gz}, r)
+		// Используем обёртку для ResponseWriter
+		gzWriter := gzipWriter{ResponseWriter: w, Writer: gz}
+
+		// Перехватываем статус для пропуска сжатия на редиректах
+		lw := &loggingResponseWriter{ResponseWriter: gzWriter, responseData: &responseData{}}
+
+		next.ServeHTTP(lw, r)
+
+		// Если статус — редирект, выводим оригинальный заголовок без gzip
+		if lw.responseData.status >= 300 && lw.responseData.status < 400 {
+			w.Header().Del("Content-Encoding")
+		}
 	}
 }
