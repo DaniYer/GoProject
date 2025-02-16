@@ -15,6 +15,7 @@ import (
 
 var sugar zap.SugaredLogger
 
+// должно работать
 type (
 	// берём структуру для хранения сведений об ответе
 	responseData struct {
