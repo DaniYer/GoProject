@@ -27,8 +27,9 @@ type (
 
 	// добавляем реализацию http.ResponseWriter
 	loggingResponseWriter struct {
-		http.ResponseWriter // встраиваем оригинальный http.ResponseWriter
-		responseData        *responseData
+		http.ResponseWriter
+		responseData     *responseData
+		responseDataBody string
 	}
 	URL struct {
 		URL string `json:"url"`
@@ -182,6 +183,16 @@ type gzipWriter struct {
 func (w gzipWriter) Write(b []byte) (int, error) {
 	// w.Writer будет отвечать за gzip-сжатие, поэтому пишем в него
 	return w.Writer.Write(b)
+}
+
+func (lw *loggingResponseWriter) Write(b []byte) (int, error) {
+	lw.responseDataBody = string(b) // Сохраняем тело
+	return len(b), nil
+}
+
+func (lw *loggingResponseWriter) WriteHeader(statusCode int) {
+	lw.responseData.status = statusCode
+	lw.ResponseWriter.WriteHeader(statusCode)
 }
 
 func gzipHandle(next http.Handler) http.HandlerFunc {
