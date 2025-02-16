@@ -27,9 +27,8 @@ type (
 
 	// добавляем реализацию http.ResponseWriter
 	loggingResponseWriter struct {
-		http.ResponseWriter
-		responseData     *responseData
-		responseDataBody string
+		http.ResponseWriter // встраиваем оригинальный http.ResponseWriter
+		responseData        *responseData
 	}
 	URL struct {
 		URL string `json:"url"`
@@ -185,50 +184,29 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
 
-func (lw *loggingResponseWriter) Write(b []byte) (int, error) {
-	lw.responseDataBody = string(b) // Сохраняем тело
-	return len(b), nil
-}
-
-func (lw *loggingResponseWriter) WriteHeader(statusCode int) {
-	lw.responseData.status = statusCode
-	lw.ResponseWriter.WriteHeader(statusCode)
-}
-
 func gzipHandle(next http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Проверяем, поддерживает ли клиент gzip
+		// проверяем, что клиент поддерживает gzip-сжатие
+		// это упрощённый пример. В реальном приложении следует проверять все
+		// значения r.Header.Values("Accept-Encoding") и разбирать строку
+		// на составные части, чтобы избежать неожиданных результатов
 		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			// если gzip не поддерживается, передаём управление
+			// дальше без изменений
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// Создаем gzip.Writer поверх оригинального ResponseWriter
+		// создаём gzip.Writer поверх текущего w
 		gz, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
 		if err != nil {
-			http.Error(w, "Failed to create gzip writer", http.StatusInternalServerError)
+			io.WriteString(w, err.Error())
 			return
 		}
 		defer gz.Close()
 
-		// Обертка для перехвата заголовков и статуса
-		lw := &loggingResponseWriter{
-			ResponseWriter: w,
-			responseData:   &responseData{},
-		}
-
-		next.ServeHTTP(lw, r)
-
-		// Условие сжатия только для JSON и HTML
-		contentType := lw.Header().Get("Content-Type")
-		if lw.responseData.status < 300 && (strings.Contains(contentType, "application/json") || strings.Contains(contentType, "text/html")) {
-			w.Header().Set("Content-Encoding", "gzip")
-			w.Header().Del("Content-Length")
-			_, _ = gz.Write([]byte(lw.responseDataBody))
-		} else {
-			// Если контент не подлежит сжатию, отдаём как есть
-			w.WriteHeader(lw.responseData.status)
-			_, _ = w.Write([]byte(lw.responseDataBody))
-		}
+		w.Header().Set("Content-Encoding", "gzip")
+		// передаём обработчику страницы переменную типа gzipWriter для вывода данных
+		next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gz}, r)
 	}
 }
