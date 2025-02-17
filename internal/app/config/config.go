@@ -20,7 +20,7 @@ func NewConfig() *Config {
 	if err != nil {
 		// Парсинг флагов
 		flag.StringVar(&cfg.ServerAddress, "a", "localhost:8080", "Адрес для запуска HTTP-сервера (например, localhost:8888)")
-		flag.StringVar(&cfg.BaseURL, "b", "localhost:8080", "Базовый адрес для сокращённых URL (например, localhost:8888)")
+		flag.StringVar(&cfg.BaseURL, "b", "http://localhost:8080", "Базовый адрес для сокращённых URL (например, http://localhost:8000)")
 		flag.Parse()
 	}
 
