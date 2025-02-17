@@ -130,6 +130,8 @@ func (lw *loggingResponseWriter) WriteHeader(statusCode int) {
 	lw.ResponseWriter.WriteHeader(statusCode)
 }
 
+// Привет Андрей!
+
 func WithLogging(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
