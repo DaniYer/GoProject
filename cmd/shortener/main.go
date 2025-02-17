@@ -119,32 +119,40 @@ func genSym() string {
 	return result
 }
 
+func (lw *loggingResponseWriter) Write(b []byte) (int, error) {
+	size, err := lw.ResponseWriter.Write(b)
+	lw.responseData.size += size
+	return size, err
+}
+
+func (lw *loggingResponseWriter) WriteHeader(statusCode int) {
+	lw.responseData.status = statusCode
+	lw.ResponseWriter.WriteHeader(statusCode)
+}
+
 func WithLogging(h http.HandlerFunc) http.HandlerFunc {
-	logFn := func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
-		responseData := &responseData{
-			status: 0,
-			size:   0,
-		}
-		lw := loggingResponseWriter{
-			ResponseWriter: w, // встраиваем оригинальный http.ResponseWriter
-			responseData:   responseData,
+		// Используем кастомный ResponseWriter для логирования
+		lw := &loggingResponseWriter{
+			ResponseWriter: w,
+			responseData:   &responseData{},
 		}
 
-		h.ServeHTTP(&lw, r) // внедряем реализацию http.ResponseWriter
+		h.ServeHTTP(lw, r)
 
 		duration := time.Since(start)
 
-		sugar.Infoln(
+		// Логируем данные
+		sugar.Infow("Request completed",
 			"uri", r.RequestURI,
 			"method", r.Method,
-			"status", responseData.status, // получаем перехваченный код статуса ответа
+			"status", lw.responseData.status,
 			"duration", duration,
-			"size", responseData.size, // получаем перехваченный размер ответа
+			"size", lw.responseData.size,
 		)
 	}
-	return logFn
 }
 
 type shortenRequest struct {
@@ -187,27 +195,36 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 func gzipHandle(next http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
-		// проверяем, что клиент поддерживает gzip-сжатие
-		// это упрощённый пример. В реальном приложении следует проверять все
-		// значения r.Header.Values("Accept-Encoding") и разбирать строку
-		// на составные части, чтобы избежать неожиданных результатов
-		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") && (!strings.Contains(r.Header.Get("Content-Type"), "application/json") || !strings.Contains(r.Header.Get("Content-Type"), "text/html")) {
-			// если gzip не поддерживается, передаём управление
-			// дальше без изменений
+		// 1. Распаковка входного запроса, если он сжат
+		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
+			gzr, err := gzip.NewReader(r.Body)
+			if err != nil {
+				http.Error(w, "Failed to decode gzip", http.StatusBadRequest)
+				return
+			}
+			defer gzr.Close()
+			r.Body = gzr
+		}
+
+		// 2. Проверка, поддерживает ли клиент сжатые ответы
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// создаём gzip.Writer поверх текущего w
+		// 3. Создание gzip.Writer поверх текущего ResponseWriter
 		gz, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
 		if err != nil {
-			io.WriteString(w, err.Error())
+			http.Error(w, "Failed to create gzip writer", http.StatusInternalServerError)
 			return
 		}
 		defer gz.Close()
 
+		// Устанавливаем заголовки для сжатого ответа
 		w.Header().Set("Content-Encoding", "gzip")
-		// передаём обработчику страницы переменную типа gzipWriter для вывода данных
+		w.Header().Set("Vary", "Accept-Encoding")
+
+		// Передаём управление дальше с обёрнутым gzipWriter
 		next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gz}, r)
 	}
 }
