@@ -9,20 +9,20 @@ import (
 
 // Config структура для хранения конфигурации
 type Config struct {
-	ServerAddress string `env:"SERVER_ADDRESS" envDefault:"http://localhost:8080"`
-	BaseURL       string
+	ServerAddress   string `env:"SERVER_ADDRESS" envDefault:"http://localhost:8080"`
+	BaseURL         string `env:"BASE_URL" envDefault:"http://localhost:8080"`
+	FileStoragePath string `env:"FILE_STORAGE_PATH" envDefault:"storage.json"`
 }
 
 // NewConfig функция для создания и парсинга конфигурации
 func NewConfig() *Config {
 	cfg := &Config{}
-	err := env.Parse(&cfg)
-	if err != nil {
-		// Парсинг флагов
-		flag.StringVar(&cfg.ServerAddress, "a", "localhost:8080", "Адрес для запуска HTTP-сервера (например, localhost:8888)")
-		flag.StringVar(&cfg.BaseURL, "b", "http://localhost:8080", "Базовый адрес для сокращённых URL (например, http://localhost:8000)")
-		flag.Parse()
-	}
+	env.Parse(cfg)
+
+	flag.StringVar(&cfg.ServerAddress, "a", cfg.ServerAddress, "Адрес для запуска HTTP-сервера")
+	flag.StringVar(&cfg.BaseURL, "b", cfg.BaseURL, "Базовый адрес для сокращённых URL")
+	flag.StringVar(&cfg.FileStoragePath, "f", cfg.FileStoragePath, "Путь до файла хранения URL")
+	flag.Parse()
 
 	return cfg
 }
