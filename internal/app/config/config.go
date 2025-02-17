@@ -3,7 +3,6 @@ package config
 import (
 	"flag"
 	"fmt"
-	"os"
 
 	"github.com/caarlos0/env"
 )
@@ -32,14 +31,4 @@ func NewConfig() *Config {
 func (c *Config) Print() {
 	fmt.Printf("Сервер будет запущен на: %s\n", c.ServerAddress)
 	fmt.Printf("Базовый URL для сокращённых ссылок: %s\n", c.BaseURL)
-}
-
-func (cfg *Config) GetFileStoragePath() string {
-	if path := os.Getenv("FILE_STORAGE_PATH"); path != "" {
-		return path
-	}
-	if cfg.FileStoragePath != "" {
-		return cfg.FileStoragePath
-	}
-	return "urls.json" // значение по умолчанию
 }
