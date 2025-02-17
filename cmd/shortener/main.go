@@ -7,7 +7,6 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -228,58 +227,4 @@ func gzipHandle(next http.Handler) http.HandlerFunc {
 		// Передаём управление дальше с обёрнутым gzipWriter
 		next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gz}, r)
 	}
-}
-
-type URLRecord struct {
-	UUID        string `json:"uuid"`
-	ShortURL    string `json:"short_url"`
-	OriginalURL string `json:"original_url"`
-}
-
-type FileStorage struct {
-	FilePath string
-}
-
-func NewFileStorage(filePath string) *FileStorage {
-	return &FileStorage{FilePath: filePath}
-}
-
-// Save сохраняет данные в файл
-func (fs *FileStorage) Save(records []URLRecord) error {
-	file, err := os.Create(fs.FilePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	encoder := json.NewEncoder(file)
-	for _, record := range records {
-		if err := encoder.Encode(record); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// Load загружает данные из файла
-func (fs *FileStorage) Load() ([]URLRecord, error) {
-	file, err := os.Open(fs.FilePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil // Если файл отсутствует — возвращаем пустой список
-		}
-		return nil, err
-	}
-	defer file.Close()
-
-	var records []URLRecord
-	decoder := json.NewDecoder(file)
-	for {
-		var record URLRecord
-		if err := decoder.Decode(&record); err != nil {
-			break // EOF или ошибка чтения
-		}
-		records = append(records, record)
-	}
-	return records, nil
 }
