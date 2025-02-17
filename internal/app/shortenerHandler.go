@@ -15,7 +15,7 @@ type Links struct {
 // Обработчик для сокращения URL (POST /)
 func (a *Links) Shortener(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		http.Error(w, "Invalid request method", http.StatusBadRequest)
 		return
 	}
 
@@ -27,6 +27,9 @@ func (a *Links) Shortener(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Удаление лишних пробелов и символов новой строки
+	originalURL = strings.TrimSpace(originalURL)
+
 	// Генерация уникального ID для сокращенного URL
 	id := generateID()
 
@@ -35,6 +38,7 @@ func (a *Links) Shortener(w http.ResponseWriter, r *http.Request) {
 
 	// Создание сокращенной ссылки
 	smallURL := fmt.Sprintf("http://localhost:8080/%s", id)
+	smallURL = strings.TrimSpace(smallURL) // Убираем возможные символы новой строки
 
 	// Отправка ответа с сокращенным URL
 	w.Header().Set("Content-Type", "text/plain")
@@ -50,12 +54,13 @@ func generateID() string {
 // Обработчик для перенаправления по сокращенному URL (GET /{id})
 func (a *Links) ShortenerLink(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		http.Error(w, "Invalid request method", http.StatusBadRequest)
 		return
 	}
 
 	// Извлечение ID из URL
 	id := getIDFromURL(r.URL.Path)
+	fmt.Println(id)
 
 	// Проверка наличия URL в хранилище
 	originalURL, exists := a.storage[id]
@@ -65,7 +70,7 @@ func (a *Links) ShortenerLink(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Перенаправление на оригинальный URL
-	http.Redirect(w, r, originalURL, http.StatusFound) // Код 307 (Temporary Redirect)
+	http.Redirect(w, r, originalURL, http.StatusTemporaryRedirect) // Код 307 (Temporary Redirect)
 }
 
 // Функция для извлечения ID из URL
