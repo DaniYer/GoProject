@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
 
-	"github.com/DaniYer/GoProject.git/internal/app/config"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
@@ -18,33 +18,41 @@ var sugar *zap.SugaredLogger
 var storage *Storage
 
 func main() {
-	cfg := config.NewConfig()
-	logger, _ := zap.NewDevelopment()
-	sugar = logger.Sugar()
-	defer logger.Sync()
+	initLogger()
 
-	// Создаём файловое хранилище
+	// Указываем путь к файлу для хранения ссылок
+	filePath := "storage.json"
+
+	// Создаём хранилище
 	var err error
-	storage, err = NewStorage(cfg.FileStoragePath)
+	storage, err = NewStorage(filePath)
 	if err != nil {
-		panic("Ошибка загрузки хранилища: " + err.Error())
+		log.Fatalf("Ошибка при создании хранилища: %v", err)
 	}
 
-	// Подключаем маршруты
+	// Создаём маршрутизатор
 	r := chi.NewRouter()
-	r.Use(gzipMiddleware)
+
+	// Добавляем middleware
+	r.Use(gzipMiddleware) // Поддержка gzip
+
+	// Настраиваем маршруты
 	r.Post("/", WithLogging(func(w http.ResponseWriter, r *http.Request) {
-		shortenedURL(w, r, cfg.BaseURL)
+		shortenedURL(w, r, "http://localhost:8080") // Базовый URL сервера
 	}))
-	r.Get("/{id}", WithLogging(redirectedURL))
-	r.Post("/api/shorten", jsonHandler)
+	r.Get("/{id}", WithLogging(redirectedURL))       // Редирект по короткому URL
+	r.Post("/api/shorten", WithLogging(jsonHandler)) // JSON API для сокращения
 
-	fmt.Println("Запуск сервера на", cfg.ServerAddress)
+	// Запуск сервера
+	port := ":8080"
+	sugar.Infof("Сервер запущен на порту %s", port)
+	log.Fatal(http.ListenAndServe(port, r))
+}
 
-	if err = http.ListenAndServe(cfg.ServerAddress, r); err != nil {
-		sugar.Fatalf("Ошибка запуска сервера: %v", err)
-	}
-
+func initLogger() {
+	logger, _ := zap.NewProduction()
+	defer logger.Sync() // Flush buffer
+	sugar = logger.Sugar()
 }
 
 // shortenedURL принимает URL, сохраняет его и возвращает сокращённую ссылку
