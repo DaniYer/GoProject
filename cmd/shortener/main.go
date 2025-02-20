@@ -40,6 +40,7 @@ func main() {
 	if err := http.ListenAndServe(cfg.ServerAddress, r); err != nil {
 		panic(err)
 	}
+	//push
 }
 func shortenedURL(w http.ResponseWriter, r *http.Request, cfg string) {
 	// Только POST запросы
