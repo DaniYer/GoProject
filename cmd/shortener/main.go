@@ -1,11 +1,13 @@
 package main
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/DaniYer/GoProject.git/internal/app/config"
@@ -31,6 +33,7 @@ func main() {
 	// Выводим конфигурацию (для отладки)
 	cfg.Print()
 	r := chi.NewRouter()
+	r.Use(gzipMiddleware)
 	r.Post("/", WithLogging(func(w http.ResponseWriter, r *http.Request) {
 		shortenedURL(w, r, cfg.BaseURL)
 	}))
@@ -197,4 +200,44 @@ type shortenURL struct {
 
 type redirectURL struct {
 	Result string `json:"result"`
+}
+
+// gzipMiddleware обрабатывает GZIP-сжатие запросов и ответов
+func gzipMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Декодируем тело запроса, если оно сжато
+		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
+			gz, err := gzip.NewReader(r.Body)
+			if err != nil {
+				http.Error(w, "Ошибка распаковки GZIP", http.StatusBadRequest)
+				return
+			}
+			defer gz.Close()
+			r.Body = io.NopCloser(gz) // заменяем тело запроса на распакованное
+		}
+
+		// Проверяем, поддерживает ли клиент gzip
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Заворачиваем ResponseWriter в GZIP
+		gzWriter := gzip.NewWriter(w)
+		defer gzWriter.Close()
+
+		gzResponse := gzipResponseWriter{ResponseWriter: w, Writer: gzWriter}
+		w.Header().Set("Content-Encoding", "gzip")
+		next.ServeHTTP(&gzResponse, r)
+	})
+}
+
+// gzipResponseWriter добавляет поддержку GZIP-сжатия ответов
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	Writer io.Writer
+}
+
+func (w *gzipResponseWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b) // записываем сжатые данные
 }
