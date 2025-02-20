@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
@@ -35,7 +34,7 @@ func main() {
 		shortenedURL(w, r, cfg.BaseURL)
 	}))
 	r.Get("/{id}", WithLogging(redirectedURL))
-	r.Post("/api/shorten", jsonHandler)
+	// r.Post("/api/shorten", jsonHandler)
 	fmt.Println(cfg.ServerAddress)
 	if err := http.ListenAndServe(cfg.ServerAddress, r); err != nil {
 		panic(err)
@@ -151,50 +150,4 @@ func WithLogging(h http.HandlerFunc) http.HandlerFunc {
 		)
 	}
 	return logFn
-}
-
-func jsonHandler(w http.ResponseWriter, r *http.Request) {
-	// Проверка метода запроса
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Читаем тело запроса
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Ошибка чтения тела запроса", http.StatusBadRequest)
-		return
-	}
-	defer r.Body.Close()
-
-	// Парсим JSON
-	var req shortenUrl
-	if err := json.Unmarshal(body, &req); err != nil {
-		http.Error(w, "Ошибка парсинга JSON", http.StatusBadRequest)
-		return
-	}
-
-	// Генерируем короткий ID
-	genID := genSym()
-	storage[genID] = req.URL // сохраняем в хранилище
-
-	// Формируем ответ
-	resp := redirectUrl{
-		Result: "http://localhost:8080/" + genID,
-	}
-
-	// Кодируем JSON-ответ
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(resp)
-}
-
-// Структуры для JSON
-type shortenUrl struct {
-	URL string `json:"url"`
-}
-
-type redirectUrl struct {
-	Result string `json:"result"`
 }
