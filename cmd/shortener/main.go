@@ -5,33 +5,32 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
+	"os"
 	"strings"
-	"time"
 
 	"github.com/DaniYer/GoProject.git/internal/app/config"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
 
-var storage = map[string]string{}
 var sugar *zap.SugaredLogger
+var storage *Storage
 
 func main() {
-
-	// создаём предустановленный регистратор zap
-	logger, err := zap.NewDevelopment()
-	if err != nil {
-		// вызываем панику, если ошибка
-		panic(err)
-	}
-	defer logger.Sync()
-	// Получаем конфигурацию из пакета config
 	cfg := config.NewConfig()
+	logger, _ := zap.NewDevelopment()
 	sugar = logger.Sugar()
-	// Выводим конфигурацию (для отладки)
-	cfg.Print()
+	defer logger.Sync()
+
+	// Создаём файловое хранилище
+	var err error
+	storage, err = NewStorage(cfg.FileStoragePath)
+	if err != nil {
+		panic("Ошибка загрузки хранилища: " + err.Error())
+	}
+
+	// Подключаем маршруты
 	r := chi.NewRouter()
 	r.Use(gzipMiddleware)
 	r.Post("/", WithLogging(func(w http.ResponseWriter, r *http.Request) {
@@ -39,205 +38,147 @@ func main() {
 	}))
 	r.Get("/{id}", WithLogging(redirectedURL))
 	r.Post("/api/shorten", jsonHandler)
-	fmt.Println(cfg.ServerAddress)
-	if err := http.ListenAndServe(cfg.ServerAddress, r); err != nil {
-		panic(err)
+
+	fmt.Println("Запуск сервера на", cfg.ServerAddress)
+
+	if err = http.ListenAndServe(cfg.ServerAddress, r); err != nil {
+		sugar.Fatalf("Ошибка запуска сервера: %v", err)
 	}
+
 }
-func shortenedURL(w http.ResponseWriter, r *http.Request, cfg string) {
-	// Только POST запросы
+
+// shortenedURL принимает URL, сохраняет его и возвращает сокращённую ссылку
+func shortenedURL(w http.ResponseWriter, r *http.Request, baseURL string) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Unresolved method", 400)
+		http.Error(w, "Unresolved method", http.StatusBadRequest)
 		return
 	}
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil || len(body) == 0 {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 	defer r.Body.Close()
-	url := string(body)
 
-	// Генерация уникального идентификатора
+	url := string(body)
 	genID := genSym()
 
-	// Сохранение в мапу
-	storage[genID] = url
+	// Сохраняем в файл
+	if err := storage.SaveURL(genID, url); err != nil {
+		http.Error(w, "Ошибка сохранения", http.StatusInternalServerError)
+		return
+	}
 
-	// Отправка ответа с сокращенным URL
-	w.WriteHeader(201)
+	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "text/plain")
-	w.Write([]byte(cfg + "/" + genID))
+	w.Write([]byte(baseURL + "/" + genID))
 }
 
+// redirectedURL принимает сокращенный URL и редиректит на оригинальный
 func redirectedURL(w http.ResponseWriter, r *http.Request) {
-	// Только GET запросы
-	if r.Method != http.MethodGet {
-		http.Error(w, "Unresolved method", 400)
-		return
-	}
-	// Извлечение идентификатора из пути
-	id := r.URL.Path[1:]
+	id := chi.URLParam(r, "id")
 	if id == "" {
-		http.Error(w, "Empty path or not found", 400)
+		http.Error(w, "Empty path or not found", http.StatusBadRequest)
 		return
 	}
-	// Поиск в мапе
-	value, exists := storage[id]
+
+	value, exists := storage.GetURL(id)
 	if !exists {
-		http.Error(w, "URL not found", 400)
+		http.Error(w, "URL not found", http.StatusBadRequest)
 		return
 	}
-	// Редирект на оригинальный URL
+
 	http.Redirect(w, r, value, http.StatusTemporaryRedirect)
-	w.Header().Set("Content-Type", "text/plain")
-}
-func genSym() string {
-	result := ""
-	for i := 0; i < 8; i++ {
-		result += string(rune(rand.Intn(26) + 'a')) // Генерация случайных символов
-	}
-	return result
 }
 
-type (
-	// берём структуру для хранения сведений об ответе
-	responseData struct {
-		status int
-		size   int
-	}
-
-	// добавляем реализацию http.ResponseWriter
-	loggingResponseWriter struct {
-		http.ResponseWriter // встраиваем оригинальный http.ResponseWriter
-		responseData        *responseData
-	}
-)
-
-func (r *loggingResponseWriter) Write(b []byte) (int, error) {
-	// записываем ответ, используя оригинальный http.ResponseWriter
-	size, err := r.ResponseWriter.Write(b)
-	r.responseData.size += size // захватываем размер
-	return size, err
-}
-
-func (r *loggingResponseWriter) WriteHeader(statusCode int) {
-	// записываем код статуса, используя оригинальный http.ResponseWriter
-	r.ResponseWriter.WriteHeader(statusCode)
-	r.responseData.status = statusCode // захватываем код статуса
-}
-
-// ggg
-func WithLogging(h http.HandlerFunc) http.HandlerFunc {
-
-	logFn := func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-
-		responseData := &responseData{
-			status: 0,
-			size:   0,
-		}
-		lw := loggingResponseWriter{
-			ResponseWriter: w, // встраиваем оригинальный http.ResponseWriter
-			responseData:   responseData,
-		}
-		h(&lw, r) // внедряем реализацию http.ResponseWriter
-
-		duration := time.Since(start)
-
-		sugar.Infoln(
-			"uri", r.RequestURI,
-			"method", r.Method,
-			"status", responseData.status, // получаем перехваченный код статуса ответа
-			"duration", duration,
-			"size", responseData.size, // получаем перехваченный размер ответа
-		)
-	}
-	return logFn
-}
-
+// jsonHandler обрабатывает JSON-запрос с URL
 func jsonHandler(w http.ResponseWriter, r *http.Request) {
-	// Проверка метода запроса
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		return
+	var req struct {
+		URL string `json:"url"`
 	}
 
-	// Читаем тело запроса
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Ошибка чтения тела запроса", http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
 	defer r.Body.Close()
 
-	// Парсим JSON
-	var req shortenURL
-	if err := json.Unmarshal(body, &req); err != nil {
-		http.Error(w, "Ошибка парсинга JSON", http.StatusBadRequest)
+	if req.URL == "" {
+		http.Error(w, "Empty URL", http.StatusBadRequest)
 		return
 	}
 
-	// Генерируем короткий ID
 	genID := genSym()
-	storage[genID] = req.URL // сохраняем в хранилище
 
-	// Формируем ответ
-	resp := redirectURL{
-		Result: "http://localhost:8080/" + genID,
+	// Сохраняем в файл
+	if err := storage.SaveURL(genID, req.URL); err != nil {
+		http.Error(w, "Ошибка сохранения", http.StatusInternalServerError)
+		return
 	}
 
-	// Кодируем JSON-ответ
+	resp := struct {
+		Result string `json:"result"`
+	}{
+		Result: fmt.Sprintf("%s/%s", r.Host, genID),
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(resp)
 }
 
-// Структуры для JSON
-type shortenURL struct {
-	URL string `json:"url"`
+// WithLogging — middleware для логирования запросов
+func WithLogging(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sugar.Infof("Запрос: %s %s", r.Method, r.URL.Path)
+		next(w, r)
+	}
 }
 
-type redirectURL struct {
-	Result string `json:"result"`
-}
+// gzipMiddleware — middleware для работы с gzip
 
-// gzipMiddleware обрабатывает GZIP-сжатие запросов и ответов
 func gzipMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Декодируем тело запроса, если оно сжато
-		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
-			gz, err := gzip.NewReader(r.Body)
+		// Проверяем, сжат ли запрос
+		if r.Header.Get("Content-Encoding") == "gzip" {
+			reader, err := gzip.NewReader(r.Body)
 			if err != nil {
-				http.Error(w, "Ошибка распаковки GZIP", http.StatusBadRequest)
+				http.Error(w, "Failed to read gzip body", http.StatusInternalServerError)
 				return
 			}
-			defer gz.Close()
-			r.Body = io.NopCloser(gz) // заменяем тело запроса на распакованное
+			defer reader.Close()
+			r.Body = reader
 		}
 
-		// Проверяем, поддерживает ли клиент gzip
+		// Проверяем, поддерживает ли клиент GZIP
 		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// Заворачиваем ResponseWriter в GZIP
-		gzWriter := gzip.NewWriter(w)
-		defer gzWriter.Close()
+		// Создаём gzip.Writer для ответа
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
 
-		gzResponse := gzipResponseWriter{ResponseWriter: w, Writer: gzWriter}
+		// Устанавливаем заголовок только если клиент поддерживает gzip
 		w.Header().Set("Content-Encoding", "gzip")
-		next.ServeHTTP(&gzResponse, r)
+
+		gzipWriter := &gzipResponseWriter{Writer: gz, ResponseWriter: w}
+		next.ServeHTTP(gzipWriter, r)
 	})
 }
 
-// gzipResponseWriter добавляет поддержку GZIP-сжатия ответов
 type gzipResponseWriter struct {
+	io.Writer
 	http.ResponseWriter
-	Writer io.Writer
 }
 
 func (w *gzipResponseWriter) Write(b []byte) (int, error) {
-	return w.Writer.Write(b) // записываем сжатые данные
+	return w.Writer.Write(b)
+}
+
+// genSym генерирует короткий идентификатор
+func genSym() string {
+	return fmt.Sprintf("%06d", 100000+os.Getpid()%900000) // Простой генератор
 }
