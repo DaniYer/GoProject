@@ -8,9 +8,8 @@ import (
 	"github.com/caarlos0/env"
 )
 
-// Config структура для хранения конфигурации
 type Config struct {
-	ServerAddress   string `env:"SERVER_ADDRESS" envDefault:"localhost:8080"` // ✅ Без http://
+	ServerAddress   string `env:"SERVER_ADDRESS" envDefault:"localhost:8080"`
 	BaseURL         string `env:"BASE_URL" envDefault:"http://localhost:8080"`
 	FileStoragePath string
 }
