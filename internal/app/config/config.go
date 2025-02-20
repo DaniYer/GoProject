@@ -13,6 +13,8 @@ type Config struct {
 	BaseURL       string
 }
 
+//bug
+
 // NewConfig функция для создания и парсинга конфигурации
 func NewConfig() *Config {
 	cfg := &Config{}
