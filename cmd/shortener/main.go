@@ -169,7 +169,7 @@ func jsonHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	// Парсим JSON
-	var req shortenUrl
+	var req shortenURL
 	if err := json.Unmarshal(body, &req); err != nil {
 		http.Error(w, "Ошибка парсинга JSON", http.StatusBadRequest)
 		return
@@ -180,7 +180,7 @@ func jsonHandler(w http.ResponseWriter, r *http.Request) {
 	storage[genID] = req.URL // сохраняем в хранилище
 
 	// Формируем ответ
-	resp := redirectUrl{
+	resp := redirectURL{
 		Result: "http://localhost:8080/" + genID,
 	}
 
@@ -191,10 +191,10 @@ func jsonHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // Структуры для JSON
-type shortenUrl struct {
+type shortenURL struct {
 	URL string `json:"url"`
 }
 
-type redirectUrl struct {
+type redirectURL struct {
 	Result string `json:"result"`
 }
