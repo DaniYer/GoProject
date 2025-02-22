@@ -37,7 +37,7 @@ func TestMain(m *testing.M) {
 // TestShortenedURL проверяет обработчик POST "/" для создания сокращённого URL.
 func TestShortenedURL(t *testing.T) {
 	// Сбрасываем глобальное хранилище и счетчик
-	storage = map[string]string{}
+	storage = NewSafeStorage()
 	nextUUID = 1
 
 	// Формируем запрос с телом, содержащим исходный URL
@@ -69,7 +69,7 @@ func TestShortenedURL(t *testing.T) {
 		t.Errorf("ожидалась длина сокращённого URL равная 8, получено %d", len(shortURL))
 	}
 	// Проверяем, что в хранилище появился соответствующий URL
-	if original, exists := storage[shortURL]; !exists || original != "http://example.com" {
+	if original, exists := storage.Get(shortURL); !exists || original != "http://example.com" {
 		t.Errorf("хранилище не обновлено корректно, ожидался http://example.com, получено %v", original)
 	}
 }
@@ -77,10 +77,10 @@ func TestShortenedURL(t *testing.T) {
 // TestRedirectedURL проверяет корректность редиректа по сокращённому URL.
 func TestRedirectedURL(t *testing.T) {
 	// Инициализируем хранилище с заранее известным значением
-	storage = map[string]string{}
+	storage = NewSafeStorage()
 	shortURL := "abcdefgh"
 	originalURL := "http://example.org"
-	storage[shortURL] = originalURL
+	storage.Set(shortURL, originalURL)
 
 	req := httptest.NewRequest(http.MethodGet, "/"+shortURL, nil)
 	w := httptest.NewRecorder()
@@ -103,7 +103,7 @@ func TestRedirectedURL(t *testing.T) {
 // TestJSONHandler проверяет создание сокращённого URL через JSON API.
 func TestJSONHandler(t *testing.T) {
 	// Сбрасываем хранилище и счетчик
-	storage = map[string]string{}
+	storage = NewSafeStorage()
 	nextUUID = 1
 
 	// Подготавливаем JSON-запрос
@@ -135,7 +135,7 @@ func TestJSONHandler(t *testing.T) {
 		t.Errorf("неверный формат результата: %s", resp.Result)
 	}
 	shortURL := parts[len(parts)-1]
-	if storedURL, exists := storage[shortURL]; !exists || storedURL != "http://example.net" {
+	if storedURL, exists := storage.Get(shortURL); !exists || storedURL != "http://example.net" {
 		t.Errorf("хранилище не обновлено корректно, ожидался http://example.net, получено %v", storedURL)
 	}
 }
@@ -143,7 +143,7 @@ func TestJSONHandler(t *testing.T) {
 // TestPersistence проверяет функции appendRecord и loadStorage, используя временный файл.
 func TestPersistence(t *testing.T) {
 	// Сбрасываем глобальное хранилище и счетчик
-	storage = map[string]string{}
+	storage = NewSafeStorage()
 	nextUUID = 1
 
 	// Создаем временный файл для хранения данных
@@ -167,14 +167,14 @@ func TestPersistence(t *testing.T) {
 	}
 
 	// Сбрасываем хранилище и счётчик, чтобы проверить загрузку данных
-	storage = map[string]string{}
+	storage = NewSafeStorage()
 	nextUUID = 1
 
 	if err := loadStorage(storageFilePath); err != nil {
 		t.Fatalf("ошибка loadStorage: %v", err)
 	}
 	// Проверяем, что запись загрузилась корректно
-	if original, exists := storage["testurl1"]; !exists || original != "http://test1.com" {
+	if original, exists := storage.Get("testurl1"); !exists || original != "http://test1.com" {
 		t.Errorf("тест персистентности не пройден, ожидался http://test1.com, получено %v", original)
 	}
 }

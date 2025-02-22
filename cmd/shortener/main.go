@@ -19,7 +19,7 @@ import (
 )
 
 // git
-var storage = map[string]string{}
+var storage = NewSafeStorage()
 var sugar *zap.SugaredLogger
 
 // Глобальные переменные для работы с персистентным хранилищем
@@ -90,7 +90,7 @@ func loadStorage(filePath string) error {
 			sugar.Errorf("Ошибка парсинга записи: %v", err)
 			continue
 		}
-		storage[rec.ShortURL] = rec.OriginalURL
+		storage.Set(rec.ShortURL, rec.OriginalURL)
 		// Обновляем nextUUID, если найденное значение UUID больше текущего
 		if id, err := strconv.Atoi(rec.UUID); err == nil && id >= nextUUID {
 			nextUUID = id + 1
@@ -131,7 +131,7 @@ func shortenedURL(w http.ResponseWriter, r *http.Request, baseURL string) {
 
 	// Генерация короткого URL
 	shortURL := genSym()
-	storage[shortURL] = url
+	storage.Set(shortURL, url)
 
 	// Формирование записи с уникальным идентификатором
 	record := Record{
@@ -164,7 +164,7 @@ func redirectedURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Поиск в карте
-	value, exists := storage[id]
+	value, exists := storage.Get(id)
 	if !exists {
 		http.Error(w, "URL not found", 400)
 		return
@@ -255,7 +255,7 @@ func jsonHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Генерация короткого URL
 	shortURL := genSym()
-	storage[shortURL] = req.URL
+	storage.Set(shortURL, req.URL)
 
 	record := Record{
 		UUID:        strconv.Itoa(nextUUID),
