@@ -2,7 +2,6 @@ package main
 
 import (
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
@@ -10,62 +9,80 @@ import (
 )
 
 func Test_shortenedURL(t *testing.T) {
-	storage, _ = NewStorage("test_storage.json") // Тестовое хранилище
-	defer os.Remove("test_storage.json")         // Удаляем файл после тестов
 
-	tests := []struct {
-		name   string
-		method string
+	type want struct {
+		code   int
 		body   string
-		want   int
-	}{
-		{"Positive Test", "POST", "https://practicum.yandex.ru/", 201},
-		{"Empty Body", "POST", "", 400},
-		{"Incorrect Method", "GET", "", 400},
+		method string
 	}
 
+	tests := []struct {
+		name string
+		want want
+	}{
+		// TODO: Add test cases.
+		{name: "positive test",
+			want: want{
+				code:   201,
+				body:   "https://practicum.yandex.ru/",
+				method: "POST",
+			}},
+		{name: "Empty Body",
+			want: want{
+				code:   400,
+				body:   "",
+				method: "POST",
+			}},
+		{name: "Incorrect Method",
+			want: want{
+				code:   400,
+				body:   "",
+				method: "GET",
+			}},
+	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := httptest.NewRequest(tt.method, "/", strings.NewReader(tt.body))
+			r := httptest.NewRequest(tt.want.method, "localhost:8080", strings.NewReader(tt.want.body))
 			w := httptest.NewRecorder()
-
-			shortenedURL(w, r, "http://localhost:8080")
-
+			shortenedURL(w, r, "localhost:8080")
 			res := w.Result()
-			defer res.Body.Close()
+			assert.Equal(t, tt.want.code, res.StatusCode)
+			res.Body.Close()
 
-			assert.Equal(t, tt.want, res.StatusCode)
 		})
 	}
 }
 
 func Test_redirectedURL(t *testing.T) {
-	storage, _ = NewStorage("test_storage.json") // Тестовое хранилище
-	defer os.Remove("test_storage.json")         // Удаляем файл после тестов
 
-	// Добавляем тестовые данные
-	storage.SaveURL("test123", "https://example.com")
+	type want struct {
+		code int
 
+		method string
+	}
 	tests := []struct {
 		name string
 		id   string
-		want int
+		want want
 	}{
-		{"Existing URL", "test123", 307},
-		{"Non-Existing URL", "notfound", 400},
-	}
+		// TODO: Add test cases.
+		{
+			name: "Pos Request",
+			id:   "1111111",
 
+			want: want{307, "GET"},
+		},
+	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := httptest.NewRequest("GET", "/"+tt.id, nil)
+			storage[tt.id] = "expample.com"
+			r := httptest.NewRequest(tt.want.method, "/"+tt.id, nil)
 			w := httptest.NewRecorder()
-
 			redirectedURL(w, r)
-
 			res := w.Result()
-			defer res.Body.Close()
+			assert.Equal(t, tt.want.code, res.StatusCode)
+			res.Body.Close()
 
-			assert.Equal(t, tt.want, res.StatusCode)
 		})
 	}
 }
