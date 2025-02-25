@@ -19,27 +19,25 @@ func NewSafeStorage() *SafeStorage {
 func (s *SafeStorage) Get(key string) (string, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	value, err := s.m[key]
-	return value, err
+	value, ok := s.m[key]
+	return value, ok
 }
 
 // Set безопасно устанавливает значение по ключу.
 func (s *SafeStorage) Set(key, value string) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.m[key] = value
 }
 
 // Delete безопасно удаляет значение по ключу.
-
 func (s *SafeStorage) Delete(key string) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	delete(s.m, key)
 }
 
-// Keys возвращает список всех ключей (можно использовать, например, в эндпоинте для получения всех URL).
-
+// Keys возвращает список всех ключей.
 func (s *SafeStorage) Keys() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

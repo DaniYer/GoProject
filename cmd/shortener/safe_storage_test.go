@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"sync"
 	"testing"
 )
@@ -33,7 +34,7 @@ func TestSafeStorageConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			key := "key" + string(i)
+			key := "key" + strconv.Itoa(i)
 			ss.Set(key, "value")
 		}(i)
 	}

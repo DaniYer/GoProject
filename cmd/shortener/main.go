@@ -58,6 +58,8 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Use(gzipMiddleware)
+	r.Get("/api/list", getLists)
+	r.Get("/delete/{id}", deleteID)
 	r.Post("/", WithLogging(func(w http.ResponseWriter, r *http.Request) {
 		shortenedURL(w, r, cfg.BaseURL)
 	}))
@@ -319,4 +321,111 @@ type gzipResponseWriter struct {
 
 func (w *gzipResponseWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
+}
+
+func getLists(w http.ResponseWriter, r *http.Request) {
+	file, err := os.Open(storageFilePath)
+	if err != nil {
+		http.Error(w, "Internal Server Error", 500)
+		return
+	}
+	defer file.Close()
+
+	var records []Record
+
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		var rec Record
+		if err := json.Unmarshal(scanner.Bytes(), &rec); err != nil {
+			sugar.Errorf("Ошибка парсинга записи: %v", err)
+			continue
+		}
+		records = append(records, rec)
+	}
+	if scanner.Err() != nil {
+		sugar.Errorf("Ошибка парсинга записи: %v", err)
+
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(records); err != nil {
+		http.Error(w, "Ошибка кодирования JSON", http.StatusInternalServerError)
+	}
+}
+
+func deleteID(w http.ResponseWriter, r *http.Request) {
+	// Получаем id из URL
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		http.Error(w, "Некорректный id", http.StatusBadRequest)
+		return
+	}
+
+	// Читаем все записи из файла
+	file, err := os.Open(storageFilePath)
+	if err != nil {
+		http.Error(w, "Ошибка открытия файла", http.StatusInternalServerError)
+		return
+	}
+	defer file.Close()
+
+	var records []Record
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		var rec Record
+		if err := json.Unmarshal(scanner.Bytes(), &rec); err != nil {
+			sugar.Errorf("Ошибка парсинга записи: %v", err)
+			continue
+		}
+		records = append(records, rec)
+	}
+	if err := scanner.Err(); err != nil {
+		sugar.Errorf("Ошибка чтения файла: %v", err)
+		http.Error(w, "Ошибка чтения файла", http.StatusInternalServerError)
+		return
+	}
+
+	// Фильтруем записи, исключая запись с заданным id
+	var updatedRecords []Record
+	var deleted bool
+	for _, rec := range records {
+		if rec.UUID == id {
+			deleted = true
+			// Также удаляем из in-memory хранилища
+			storage.Delete(rec.ShortURL)
+			continue
+		}
+		updatedRecords = append(updatedRecords, rec)
+	}
+
+	if !deleted {
+		http.Error(w, "Запись не найдена", http.StatusNotFound)
+		return
+	}
+
+	// Открываем файл для перезаписи (очищаем его)
+	fileW, err := os.OpenFile(storageFilePath, os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		http.Error(w, "Ошибка открытия файла для записи", http.StatusInternalServerError)
+		return
+	}
+	defer fileW.Close()
+
+	// Перезаписываем файл обновлёнными записями
+	for _, rec := range updatedRecords {
+		recBytes, err := json.Marshal(rec)
+		if err != nil {
+			sugar.Errorf("Ошибка маршалингу записи: %v", err)
+			continue
+		}
+		if _, err := fileW.Write(append(recBytes, '\n')); err != nil {
+			sugar.Errorf("Ошибка записи в файл: %v", err)
+			http.Error(w, "Ошибка записи в файл", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Запись успешно удалена и файл перезаписан"))
 }
