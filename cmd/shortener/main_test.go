@@ -178,3 +178,43 @@ func TestPersistence(t *testing.T) {
 		t.Errorf("тест персистентности не пройден, ожидался http://test1.com, получено %v", original)
 	}
 }
+
+// TestPingHandler_Error проверяет, что при некорректной строке подключения /ping возвращает 500.
+func TestPingHandler_Error(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	w := httptest.NewRecorder()
+
+	// Используем заведомо неверную строку подключения
+	pingHandler(w, req, "invalid-dsn")
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusInternalServerError {
+		t.Errorf("Ожидался статус 500, получен %d", res.StatusCode)
+	}
+}
+
+// TestPingHandler_Success проверяет, что при корректном DSN /ping возвращает 200 OK.
+// Этот тест будет запущен только если в переменной окружения DATABASE_DSN задана корректная строка подключения.
+func TestPingHandler_Success(t *testing.T) {
+	// Читаем DSN из переменной окружения
+	dsn := os.Getenv("DATABASE_DSN")
+	if dsn == "" || dsn == "localDB" {
+		t.Skip("Пропуск теста, так как не настроена корректная строка подключения к БД")
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	w := httptest.NewRecorder()
+	pingHandler(w, req, dsn)
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("Ожидался статус 200, получен %d", res.StatusCode)
+	}
+
+	body, _ := io.ReadAll(res.Body)
+	if !strings.Contains(string(body), "Связь налажена") {
+		t.Errorf("Неверное тело ответа: %s", string(body))
+	}
+}
