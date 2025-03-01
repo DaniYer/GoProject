@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"compress/gzip"
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/DaniYer/GoProject.git/internal/app/config"
 	"github.com/go-chi/chi/v5"
+	_ "github.com/lib/pq"
 	"go.uber.org/zap"
 )
 
@@ -61,7 +64,10 @@ func main() {
 		shortenedURL(w, r, cfg.BaseURL)
 	}))
 	r.Get("/{id}", WithLogging(redirectedURL))
-	r.Post("/api/shorten", jsonHandler)
+	r.Post("/api/shorten", WithLogging(jsonHandler))
+	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
+		pingHandler(w, r, cfg.DatabaseDSN)
+	})
 
 	fmt.Println(cfg.ServerAddress)
 	if err := http.ListenAndServe(cfg.ServerAddress, r); err != nil {
@@ -69,7 +75,7 @@ func main() {
 	}
 }
 
-// Функция для загрузки данных из файла
+// loadStorage загружает данные из файла в память.
 func loadStorage(filePath string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -98,7 +104,7 @@ func loadStorage(filePath string) error {
 	return scanner.Err()
 }
 
-// Функция для добавления записи в файл
+// appendRecord дописывает запись в файл.
 func appendRecord(rec Record, filePath string) error {
 	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -114,8 +120,8 @@ func appendRecord(rec Record, filePath string) error {
 	return err
 }
 
+// shortenedURL обрабатывает POST-запрос для создания короткого URL.
 func shortenedURL(w http.ResponseWriter, r *http.Request, baseURL string) {
-	// Проверка метода запроса
 	if r.Method != http.MethodPost {
 		http.Error(w, "Unresolved method", 400)
 		return
@@ -132,47 +138,42 @@ func shortenedURL(w http.ResponseWriter, r *http.Request, baseURL string) {
 	shortURL := genSym()
 	storage[shortURL] = url
 
-	// Формирование записи с уникальным идентификатором
 	record := Record{
 		UUID:        strconv.Itoa(nextUUID),
 		ShortURL:    shortURL,
 		OriginalURL: url,
 	}
 	nextUUID++
-	// Дописываем запись в файл
 	if err := appendRecord(record, storageFilePath); err != nil {
 		sugar.Errorf("Ошибка записи в файл: %v", err)
 	}
 
-	// Отправка ответа с сокращённым URL
-	w.WriteHeader(201)
 	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(201)
 	w.Write([]byte(baseURL + "/" + shortURL))
 }
 
+// redirectedURL обрабатывает GET-запрос для редиректа.
 func redirectedURL(w http.ResponseWriter, r *http.Request) {
-	// Проверка метода запроса
 	if r.Method != http.MethodGet {
 		http.Error(w, "Unresolved method", 400)
 		return
 	}
-	// Извлечение идентификатора из пути
 	id := r.URL.Path[1:]
 	if id == "" {
 		http.Error(w, "Empty path or not found", 400)
 		return
 	}
-	// Поиск в карте
 	value, exists := storage[id]
 	if !exists {
 		http.Error(w, "URL not found", 400)
 		return
 	}
-	// Редирект на оригинальный URL
 	http.Redirect(w, r, value, http.StatusTemporaryRedirect)
 	w.Header().Set("Content-Type", "text/plain")
 }
 
+// genSym генерирует строку из 8 случайных строчных букв.
 func genSym() string {
 	result := ""
 	for i := 0; i < 8; i++ {
@@ -182,13 +183,13 @@ func genSym() string {
 }
 
 type (
-	// структура для хранения сведений об ответе
+	// responseData хранит сведения об ответе для логирования.
 	responseData struct {
 		status int
 		size   int
 	}
 
-	// расширенный http.ResponseWriter для логирования
+	// loggingResponseWriter расширяет http.ResponseWriter для логирования.
 	loggingResponseWriter struct {
 		http.ResponseWriter
 		responseData *responseData
@@ -232,8 +233,8 @@ func WithLogging(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// jsonHandler обрабатывает JSON-запрос для создания короткого URL.
 func jsonHandler(w http.ResponseWriter, r *http.Request) {
-	// Проверка метода запроса
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
@@ -252,7 +253,6 @@ func jsonHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Генерация короткого URL
 	shortURL := genSym()
 	storage[shortURL] = req.URL
 
@@ -266,7 +266,6 @@ func jsonHandler(w http.ResponseWriter, r *http.Request) {
 		sugar.Errorf("Ошибка записи в файл: %v", err)
 	}
 
-	// Формирование ответа
 	resp := redirectURL{
 		Result: "http://localhost:8080/" + shortURL,
 	}
@@ -276,7 +275,6 @@ func jsonHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// Структуры для JSON
 type shortenURL struct {
 	URL string `json:"url"`
 }
@@ -318,4 +316,35 @@ type gzipResponseWriter struct {
 
 func (w *gzipResponseWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
+}
+
+// initDB устанавливает соединение с базой данных и выполняет проверку (ping).
+func initDB(driverName string, dataSourceName string) (*sql.DB, error) {
+	db, err := sql.Open(driverName, dataSourceName)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	if err = db.PingContext(ctx); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return db, nil
+}
+
+// pingHandler проверяет соединение с базой данных и возвращает 200 OK при успехе,
+// либо 500 Internal Server Error, если подключение не удалось.
+func pingHandler(w http.ResponseWriter, r *http.Request, dataSN string) {
+	db, err := initDB("postgres", dataSN)
+	if err != nil {
+		sugar.Errorf("Ошибка чтения базы данных: %v", err)
+		http.Error(w, "Ошибка соединения с БД", http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+
+	// Если соединение установлено, возвращаем сообщение (по умолчанию статус 200 OK)
+	w.Write([]byte("Связь налажена"))
 }
