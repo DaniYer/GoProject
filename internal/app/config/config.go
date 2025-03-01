@@ -12,6 +12,7 @@ type Config struct {
 	ServerAddress   string `env:"SERVER_ADDRESS" envDefault:"localhost:8080"`
 	BaseURL         string `env:"BASE_URL" envDefault:"http://localhost:8080"`
 	FileStoragePath string
+	DatabaseDSN     string `env:"DATABASE_DSN" envDefault:"localDB"`
 }
 
 func NewConfig() *Config {
@@ -22,15 +23,14 @@ func NewConfig() *Config {
 		fmt.Println("Ошибка парсинга переменных окружения:", err)
 	}
 
-	// Определяем флаги для всех параметров
-	// Значения по умолчанию берутся из структуры (с envDefault), но если флаг передан – он будет использован
+	// Определяем флаги для параметров
 	fileStoragePathFlag := flag.String("f", "storage.json", "Путь к файлу хранения данных")
 	serverAddressFlag := flag.String("a", "localhost:8080", "Адрес сервера (например, localhost:8080)")
 	baseURLFlag := flag.String("b", "http://localhost:8080", "Базовый URL для сокращённых ссылок")
+	DatabaseDSN := flag.String("d", "localDB", "Строка подключения к базе данных")
 
 	flag.Parse()
 
-	// Для каждого параметра, если переменная окружения задана, она имеет приоритет
 	if envPath, exists := os.LookupEnv("FILE_STORAGE_PATH"); exists && envPath != "" {
 		cfg.FileStoragePath = envPath
 	} else {
@@ -54,8 +54,14 @@ func NewConfig() *Config {
 	} else {
 		cfg.BaseURL = *baseURLFlag
 	}
-	if cfg.BaseURL == "" {
-		cfg.BaseURL = "http://localhost:8080"
+
+	if envDSN, exists := os.LookupEnv("DATABASE_DSN"); exists && envDSN != "" {
+		cfg.DatabaseDSN = envDSN
+	} else {
+		cfg.DatabaseDSN = *DatabaseDSN
+	}
+	if cfg.DatabaseDSN == "" {
+		cfg.DatabaseDSN = "localDB"
 	}
 
 	return cfg
