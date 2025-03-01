@@ -17,18 +17,13 @@ type Config struct {
 
 func NewConfig() *Config {
 	cfg := &Config{}
-
-	// Сначала пытаемся прочитать переменные окружения
 	if err := env.Parse(cfg); err != nil {
 		fmt.Println("Ошибка парсинга переменных окружения:", err)
 	}
-
-	// Определяем флаги для параметров
 	fileStoragePathFlag := flag.String("f", "storage.json", "Путь к файлу хранения данных")
 	serverAddressFlag := flag.String("a", "localhost:8080", "Адрес сервера (например, localhost:8080)")
 	baseURLFlag := flag.String("b", "http://localhost:8080", "Базовый URL для сокращённых ссылок")
-	DatabaseDSN := flag.String("d", "localDB", "Строка подключения к базе данных")
-
+	dsnFlag := flag.String("d", "localDB", "Строка подключения к базе данных")
 	flag.Parse()
 
 	if envPath, exists := os.LookupEnv("FILE_STORAGE_PATH"); exists && envPath != "" {
@@ -58,7 +53,7 @@ func NewConfig() *Config {
 	if envDSN, exists := os.LookupEnv("DATABASE_DSN"); exists && envDSN != "" {
 		cfg.DatabaseDSN = envDSN
 	} else {
-		cfg.DatabaseDSN = *DatabaseDSN
+		cfg.DatabaseDSN = *dsnFlag
 	}
 	if cfg.DatabaseDSN == "" {
 		cfg.DatabaseDSN = "localDB"
