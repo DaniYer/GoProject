@@ -223,6 +223,9 @@ func main() {
 	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
 		pingHandler(w, r, cfg.DatabaseDSN)
 	})
+	r.Post("/api/shorten/batch", func(w http.ResponseWriter, r *http.Request) {
+		batchShortenHandler(w, r, "http://localhost:8080", NewMemoryStore())
+	})
 
 	fmt.Println("Сервер запущен на", cfg.ServerAddress)
 	if err := http.ListenAndServe(cfg.ServerAddress, r); err != nil {
@@ -432,3 +435,48 @@ func pingHandler(w http.ResponseWriter, r *http.Request, dataSN string) {
 }
 
 // iter12
+type BatchRequest struct {
+	CorrelationID string `json:"correlation_id"`
+	OriginalURL   string `json:"original_url"`
+}
+
+type BatchResponse struct {
+	CorrelationID string `json:"correlation_id"`
+	ShortURL      string `json:"short_url"`
+}
+
+func batchShortenHandler(w http.ResponseWriter, r *http.Request, baseURL string, store URLStore) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var requests []BatchRequest
+	if err := json.NewDecoder(r.Body).Decode(&requests); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if len(requests) == 0 {
+		http.Error(w, "Empty batch request", http.StatusBadRequest)
+		return
+	}
+
+	responses := make([]BatchResponse, len(requests))
+
+	for i, req := range requests {
+		shortURL := genSym()
+		if err := store.Save(shortURL, req.OriginalURL); err != nil {
+			http.Error(w, "Error saving URL", http.StatusInternalServerError)
+			return
+		}
+		responses[i] = BatchResponse{
+			CorrelationID: req.CorrelationID,
+			ShortURL:      baseURL + "/" + shortURL,
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(responses)
+}

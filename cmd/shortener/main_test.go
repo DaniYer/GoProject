@@ -174,3 +174,41 @@ func TestPingHandler_Success(t *testing.T) {
 		t.Errorf("Неверное тело ответа: %s", string(body))
 	}
 }
+func TestBatchShortenHandler(t *testing.T) {
+	store := NewMemoryStore()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		batchShortenHandler(w, r, "http://localhost:8080", store)
+	}))
+	defer server.Close()
+
+	requestBody := `[
+		{"correlation_id": "123", "original_url": "http://example.com"},
+		{"correlation_id": "456", "original_url": "http://example.org"}
+	]`
+
+	req := httptest.NewRequest(http.MethodPost, server.URL, strings.NewReader(requestBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	batchShortenHandler(w, req, "http://localhost:8080", store)
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusCreated {
+		t.Errorf("Expected status 201, got %d", res.StatusCode)
+	}
+
+	var responses []BatchResponse
+	if err := json.NewDecoder(res.Body).Decode(&responses); err != nil {
+		t.Fatalf("Error decoding response JSON: %v", err)
+	}
+
+	if len(responses) != 2 {
+		t.Errorf("Expected 2 responses, got %d", len(responses))
+	}
+
+	for _, resp := range responses {
+		if !strings.HasPrefix(resp.ShortURL, "http://localhost:8080/") {
+			t.Errorf("Short URL does not have expected prefix: %s", resp.ShortURL)
+		}
+	}
+}
