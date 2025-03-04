@@ -430,3 +430,5 @@ func pingHandler(w http.ResponseWriter, r *http.Request, dataSN string) {
 	// Если соединение установлено, возвращаем сообщение (по умолчанию статус 200 OK)
 	w.Write([]byte("Связь налажена"))
 }
+
+// iter12
