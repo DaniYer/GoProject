@@ -223,9 +223,9 @@ func main() {
 	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
 		pingHandler(w, r, cfg.DatabaseDSN)
 	})
-	r.Post("/api/shorten/batch", func(w http.ResponseWriter, r *http.Request) {
-		batchShortenHandler(w, r, "http://localhost:8080", NewMemoryStore())
-	})
+	r.Post("/api/shorten/batch", WithLogging(func(w http.ResponseWriter, r *http.Request) {
+		batchShortenHandler(w, r, cfg.BaseURL, store)
+	}))
 
 	fmt.Println("Сервер запущен на", cfg.ServerAddress)
 	if err := http.ListenAndServe(cfg.ServerAddress, r); err != nil {
