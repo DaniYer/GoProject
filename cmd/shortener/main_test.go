@@ -19,34 +19,27 @@ func TestMain(m *testing.M) {
 	}
 	sugar = logger.Sugar()
 
-	// Создаём временный файл для хранения данных
+	// Создаём временный файл для тестов файлового хранилища
 	tmpFile, err := os.CreateTemp("", "test_storage_*.json")
 	if err != nil {
 		panic(err)
 	}
-	storageFilePath = tmpFile.Name()
+	storageFilePath := tmpFile.Name()
 	tmpFile.Close()
+	// Устанавливаем переменную окружения для использования файлового хранилища
+	os.Setenv("FILE_STORAGE_PATH", storageFilePath)
 
 	code := m.Run()
-
-	// Очистка временного файла после тестов
 	os.Remove(storageFilePath)
 	os.Exit(code)
 }
 
-// TestShortenedURL проверяет обработчик POST "/" для создания сокращённого URL.
 func TestShortenedURL(t *testing.T) {
-	// Сбрасываем глобальное хранилище и счетчик
-	storage = map[string]string{}
-	nextUUID = 1
-
-	// Формируем запрос с телом, содержащим исходный URL
+	store := NewMemoryStore() // используем in-memory хранилище для теста
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("http://example.com"))
 	w := httptest.NewRecorder()
 	baseURL := "http://localhost:8080"
-
-	// Вызываем обработчик
-	shortenedURL(w, req, baseURL)
+	shortenedURL(w, req, baseURL, store)
 	res := w.Result()
 	defer res.Body.Close()
 
@@ -55,8 +48,6 @@ func TestShortenedURL(t *testing.T) {
 	}
 	body, _ := io.ReadAll(res.Body)
 	responseStr := string(body)
-
-	// Проверяем, что ответ начинается с базового URL и содержит сокращённую часть длиной 8 символов
 	if !strings.HasPrefix(responseStr, baseURL+"/") {
 		t.Errorf("ответ не начинается с базового URL: %s", responseStr)
 	}
@@ -68,51 +59,39 @@ func TestShortenedURL(t *testing.T) {
 	if len(shortURL) != 8 {
 		t.Errorf("ожидалась длина сокращённого URL равная 8, получено %d", len(shortURL))
 	}
-	// Проверяем, что в хранилище появился соответствующий URL
-	if original, exists := storage[shortURL]; !exists || original != "http://example.com" {
+	if original, err := store.Get(shortURL); err != nil || original != "http://example.com" {
 		t.Errorf("хранилище не обновлено корректно, ожидался http://example.com, получено %v", original)
 	}
 }
 
-// TestRedirectedURL проверяет корректность редиректа по сокращённому URL.
 func TestRedirectedURL(t *testing.T) {
-	// Инициализируем хранилище с заранее известным значением
-	storage = map[string]string{}
+	store := NewMemoryStore()
 	shortURL := "abcdefgh"
 	originalURL := "http://example.org"
-	storage[shortURL] = originalURL
+	store.Save(shortURL, originalURL)
 
 	req := httptest.NewRequest(http.MethodGet, "/"+shortURL, nil)
 	w := httptest.NewRecorder()
-
-	redirectedURL(w, req)
+	redirectedURL(w, req, store)
 	res := w.Result()
 	defer res.Body.Close()
 
-	// Проверяем, что статус редиректа соответствует 307 (Temporary Redirect)
 	if res.StatusCode != http.StatusTemporaryRedirect {
 		t.Errorf("ожидался статус 307, получен %d", res.StatusCode)
 	}
-	// Проверяем заголовок Location
 	loc := res.Header.Get("Location")
 	if loc != originalURL {
 		t.Errorf("ожидался редирект на %s, получен %s", originalURL, loc)
 	}
 }
 
-// TestJSONHandler проверяет создание сокращённого URL через JSON API.
 func TestJSONHandler(t *testing.T) {
-	// Сбрасываем хранилище и счетчик
-	storage = map[string]string{}
-	nextUUID = 1
-
-	// Подготавливаем JSON-запрос
+	store := NewMemoryStore()
 	jsonPayload := `{"url": "http://example.net"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/shorten", strings.NewReader(jsonPayload))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-
-	jsonHandler(w, req)
+	jsonHandler(w, req, store)
 	res := w.Result()
 	defer res.Body.Close()
 
@@ -123,58 +102,113 @@ func TestJSONHandler(t *testing.T) {
 	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
 		t.Fatalf("ошибка декодирования JSON ответа: %v", err)
 	}
-
-	// Проверяем, что результат начинается с базового URL
 	expectedPrefix := "http://localhost:8080/"
 	if !strings.HasPrefix(resp.Result, expectedPrefix) {
 		t.Errorf("ожидался префикс %s, получено %s", expectedPrefix, resp.Result)
 	}
-	// Извлекаем сокращённый URL и сверяем с хранилищем
 	parts := strings.Split(resp.Result, "/")
 	if len(parts) < 2 {
 		t.Errorf("неверный формат результата: %s", resp.Result)
 	}
 	shortURL := parts[len(parts)-1]
-	if storedURL, exists := storage[shortURL]; !exists || storedURL != "http://example.net" {
+	if storedURL, err := store.Get(shortURL); err != nil || storedURL != "http://example.net" {
 		t.Errorf("хранилище не обновлено корректно, ожидался http://example.net, получено %v", storedURL)
 	}
 }
 
-// TestPersistence проверяет функции appendRecord и loadStorage, используя временный файл.
 func TestPersistence(t *testing.T) {
-	// Сбрасываем глобальное хранилище и счетчик
-	storage = map[string]string{}
-	nextUUID = 1
-
-	// Создаем временный файл для хранения данных
 	tmpFile, err := os.CreateTemp("", "storage_test_*.json")
 	if err != nil {
 		t.Fatalf("не удалось создать временный файл: %v", err)
 	}
 	defer os.Remove(tmpFile.Name())
 
-	// Устанавливаем путь к файлу в глобальную переменную
-	storageFilePath = tmpFile.Name()
-
-	// Создаем тестовую запись
-	record := Record{
-		UUID:        "1",
-		ShortURL:    "testurl1",
-		OriginalURL: "http://test1.com",
-	}
-	if err := appendRecord(record, storageFilePath); err != nil {
-		t.Fatalf("ошибка appendRecord: %v", err)
+	// Создаём FileStore
+	fs, err := NewFileStore(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Ошибка инициализации FileStore: %v", err)
 	}
 
-	// Сбрасываем хранилище и счётчик, чтобы проверить загрузку данных
-	storage = map[string]string{}
-	nextUUID = 1
-
-	if err := loadStorage(storageFilePath); err != nil {
-		t.Fatalf("ошибка loadStorage: %v", err)
+	// Сохраняем запись
+	err = fs.Save("testurl1", "http://test1.com")
+	if err != nil {
+		t.Fatalf("ошибка Save в FileStore: %v", err)
 	}
-	// Проверяем, что запись загрузилась корректно
-	if original, exists := storage["testurl1"]; !exists || original != "http://test1.com" {
+
+	// Создаём новый FileStore для проверки загрузки данных из файла
+	fs2, err := NewFileStore(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Ошибка инициализации FileStore: %v", err)
+	}
+	if original, err := fs2.Get("testurl1"); err != nil || original != "http://test1.com" {
 		t.Errorf("тест персистентности не пройден, ожидался http://test1.com, получено %v", original)
+	}
+}
+
+func TestPingHandler_Error(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	w := httptest.NewRecorder()
+	pingHandler(w, req, "invalid-dsn")
+	res := w.Result()
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusInternalServerError {
+		t.Errorf("Ожидался статус 500, получен %d", res.StatusCode)
+	}
+}
+
+func TestPingHandler_Success(t *testing.T) {
+	dsn := os.Getenv("DATABASE_DSN")
+	if dsn == "" || dsn == "localDB" {
+		t.Skip("Пропуск теста, так как не настроена корректная строка подключения к БД")
+	}
+	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	w := httptest.NewRecorder()
+	pingHandler(w, req, dsn)
+	res := w.Result()
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("Ожидался статус 200, получен %d", res.StatusCode)
+	}
+	body, _ := io.ReadAll(res.Body)
+	if !strings.Contains(string(body), "Связь налажена") {
+		t.Errorf("Неверное тело ответа: %s", string(body))
+	}
+}
+func TestBatchShortenHandler(t *testing.T) {
+	store := NewMemoryStore()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		batchShortenHandler(w, r, "http://localhost:8080", store)
+	}))
+	defer server.Close()
+
+	requestBody := `[
+		{"correlation_id": "123", "original_url": "http://example.com"},
+		{"correlation_id": "456", "original_url": "http://example.org"}
+	]`
+
+	req := httptest.NewRequest(http.MethodPost, server.URL, strings.NewReader(requestBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	batchShortenHandler(w, req, "http://localhost:8080", store)
+	res := w.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusCreated {
+		t.Errorf("Expected status 201, got %d", res.StatusCode)
+	}
+
+	var responses []BatchResponse
+	if err := json.NewDecoder(res.Body).Decode(&responses); err != nil {
+		t.Fatalf("Error decoding response JSON: %v", err)
+	}
+
+	if len(responses) != 2 {
+		t.Errorf("Expected 2 responses, got %d", len(responses))
+	}
+
+	for _, resp := range responses {
+		if !strings.HasPrefix(resp.ShortURL, "http://localhost:8080/") {
+			t.Errorf("Short URL does not have expected prefix: %s", resp.ShortURL)
+		}
 	}
 }
