@@ -1,74 +1,68 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
+
+	"github.com/go-chi/chi"
 )
 
 var storage = map[string]string{}
 
 func main() {
-	http.HandleFunc("/", shortenedURL)      // Обработка POST запроса на сокращение URL
-	http.HandleFunc("/{id}", redirectedURL) // Обработка GET запроса на редирект
-	fmt.Println("localhost:8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	// определяем слайс байт нужной длины
+	r := chi.NewRouter()
+
+	r.Post("/", genHandler)
+	r.Get("/{id}", shortURL)
+	fmt.Println("serve")
+	if err := http.ListenAndServe(":8080", r); err != nil {
 		panic(err)
 	}
+
 }
-func shortenedURL(w http.ResponseWriter, r *http.Request) {
-	// Только POST запросы
-	if r.Method != http.MethodPost {
-		http.Error(w, "Unresolved method", 400)
-		return
-	}
+
+func genHandler(w http.ResponseWriter, r *http.Request) {
+
+	id := genSym(8)
+
 	body, err := io.ReadAll(r.Body)
-	if err != nil || len(body) == 0 {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	if err != nil {
+		http.Error(w, "NotBody", 307)
 		return
+
 	}
 	defer r.Body.Close()
-	url := string(body)
 
-	// Генерация уникального идентификатора
-	genID := genSym()
-
-	// Сохранение в мапу
-	storage[genID] = url
-
-	// Отправка ответа с сокращенным URL
+	storage[id] = string(body)
 	w.WriteHeader(201)
 	w.Header().Set("Content-Type", "text/plain")
-	w.Write([]byte("http://localhost:8080/" + genID))
-}
+	w.Write([]byte("http://localhost:8080/" + id))
+	fmt.Println(storage)
 
-func redirectedURL(w http.ResponseWriter, r *http.Request) {
-	// Только GET запросы
-	if r.Method != http.MethodGet {
-		http.Error(w, "Unresolved method", 400)
-		return
-	}
-	// Извлечение идентификатора из пути
-	id := r.URL.Path[1:]
-	if id == "" {
-		http.Error(w, "Empty path or not found", 400)
-		return
-	}
-	// Поиск в мапе
+}
+func shortURL(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
 	value, exists := storage[id]
 	if !exists {
 		http.Error(w, "URL not found", 400)
 		return
 	}
-	// Редирект на оригинальный URL
 	http.Redirect(w, r, value, http.StatusTemporaryRedirect)
 	w.Header().Set("Content-Type", "text/plain")
 }
-func genSym() string {
-	result := ""
-	for i := 0; i < 8; i++ {
-		result += string(rune(rand.Intn(26) + 'a')) // Генерация случайных символов
+
+func genSym(len int) string {
+	b := make([]byte, len)
+	_, err := rand.Read(b) // записываем байты в слайс b
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+		return ""
 	}
-	return result
+	return hex.EncodeToString(b)[:len]
+
 }
