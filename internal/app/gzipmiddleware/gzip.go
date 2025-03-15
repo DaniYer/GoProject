@@ -1,44 +1,98 @@
 package gzipmiddleware
 
 import (
+	"bytes"
 	"compress/gzip"
 	"io"
 	"net/http"
 	"strings"
 )
 
-type gzipWriter struct {
+// bufferedResponseWriter буферизует ответ и сохраняет статус.
+type bufferedResponseWriter struct {
 	http.ResponseWriter
-	Writer io.Writer
+	buf         *bytes.Buffer
+	statusCode  int
+	wroteHeader bool
 }
 
-func (w gzipWriter) Write(b []byte) (int, error) {
-	// w.Writer будет отвечать за gzip-сжатие, поэтому пишем в него
-	return w.Writer.Write(b)
+// newBufferedResponseWriter создаёт новый буферизованный ResponseWriter.
+func newBufferedResponseWriter(w http.ResponseWriter) *bufferedResponseWriter {
+	return &bufferedResponseWriter{
+		ResponseWriter: w,
+		buf:            new(bytes.Buffer),
+	}
 }
+
+// WriteHeader сохраняет статус, не отправляя его сразу.
+func (b *bufferedResponseWriter) WriteHeader(statusCode int) {
+	if !b.wroteHeader {
+		b.statusCode = statusCode
+		b.wroteHeader = true
+	}
+}
+
+// Write буферизует данные.
+func (b *bufferedResponseWriter) Write(p []byte) (int, error) {
+	return b.buf.Write(p)
+}
+
+// flush отправляет буфер с компрессией или без неё в зависимости от условий.
+func (b *bufferedResponseWriter) flush(r *http.Request) error {
+	// Если заголовок Content-Type не установлен, попробуем определить его по содержимому.
+	contentType := b.Header().Get("Content-Type")
+	if contentType == "" {
+		contentType = http.DetectContentType(b.buf.Bytes())
+	}
+
+	// Определяем, поддерживает ли клиент gzip и соответствует ли тип контента требованиям.
+	shouldCompress := strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") &&
+		(strings.Contains(contentType, "application/json") || strings.Contains(contentType, "text/html"))
+
+	// Перед отправкой устанавливаем статус. Если WriteHeader не вызывался, то по умолчанию статус 200.
+	if !b.wroteHeader {
+		b.statusCode = http.StatusOK
+	}
+	b.ResponseWriter.WriteHeader(b.statusCode)
+
+	if shouldCompress {
+		// Устанавливаем заголовок, удаляем Content-Length
+		b.Header().Set("Content-Encoding", "gzip")
+		b.Header().Del("Content-Length")
+		gz := gzip.NewWriter(b.ResponseWriter)
+		defer gz.Close()
+		_, err := io.Copy(gz, b.buf)
+		return err
+	}
+
+	// Если сжатие не требуется – просто отправляем буфер.
+	_, err := b.ResponseWriter.Write(b.buf.Bytes())
+	return err
+}
+
+// GzipHandle — middleware, который:
+// 1. Если запрос сжат (Content-Encoding: gzip) — декомпрессирует тело запроса.
+// 2. Буферизует ответ и, если клиент поддерживает gzip и Content-Type — application/json или text/html, сжимает ответ.
 func GzipHandle(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// проверяем, что клиент поддерживает gzip-сжатие
-		// это упрощённый пример. В реальном приложении следует проверять все
-		// значения r.Header.Values("Accept-Encoding") и разбирать строку
-		// на составные части, чтобы избежать неожиданных результатов
-		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-			// если gzip не поддерживается, передаём управление
-			// дальше без изменений
-			next.ServeHTTP(w, r)
-			return
+		// Декомпрессия входящего запроса, если он сжат.
+		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
+			gzReader, err := gzip.NewReader(r.Body)
+			if err != nil {
+				http.Error(w, "Failed to decompress request", http.StatusBadRequest)
+				return
+			}
+			defer gzReader.Close()
+			r.Body = gzReader
 		}
 
-		// создаём gzip.Writer поверх текущего w
-		gz, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
-		if err != nil {
-			io.WriteString(w, err.Error())
-			return
-		}
-		defer gz.Close()
+		// Используем буферизованный ResponseWriter.
+		brw := newBufferedResponseWriter(w)
+		next.ServeHTTP(brw, r)
 
-		w.Header().Set("Content-Encoding", "gzip")
-		// передаём обработчику страницы переменную типа gzipWriter для вывода данных
-		next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gz}, r)
+		// После обработки запроса отправляем ответ с компрессией, если требуется.
+		if err := brw.flush(r); err != nil {
+			// Можно логировать ошибку здесь.
+		}
 	})
 }
