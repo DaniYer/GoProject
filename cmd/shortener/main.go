@@ -9,7 +9,8 @@ import (
 	"github.com/DaniYer/GoProject.git/internal/app/redirect"
 	"github.com/DaniYer/GoProject.git/internal/app/shortener"
 	"github.com/DaniYer/GoProject.git/internal/app/storage"
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
+
 	"go.uber.org/zap"
 )
 
