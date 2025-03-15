@@ -19,7 +19,7 @@ require (
 	golang.org/x/mod v0.24.0 // indirect
 	golang.org/x/net v0.37.0 // indirect
 )
-//
+
 require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-chi/chi v1.5.5
