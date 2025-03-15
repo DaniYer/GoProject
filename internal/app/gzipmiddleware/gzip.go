@@ -90,9 +90,5 @@ func GzipHandle(next http.Handler) http.Handler {
 		brw := newBufferedResponseWriter(w)
 		next.ServeHTTP(brw, r)
 
-		// После обработки запроса отправляем ответ с компрессией, если требуется.
-		if err := brw.flush(r); err != nil {
-			// Можно логировать ошибку здесь.
-		}
 	})
 }
