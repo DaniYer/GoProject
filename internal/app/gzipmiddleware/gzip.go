@@ -2,7 +2,6 @@ package gzipmiddleware
 
 import (
 	"compress/gzip"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -10,56 +9,39 @@ import (
 
 type gzipWriter struct {
 	http.ResponseWriter
-	Writer io.Writer
+	Writer *gzip.Writer
 }
 
 func (w gzipWriter) Write(b []byte) (int, error) {
-	// w.Writer будет отвечать за gzip-сжатие, поэтому пишем в него
 	return w.Writer.Write(b)
 }
+
 func GzipHandle(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var reader io.Reader
-
-		if r.Header.Get(`Content-Encoding`) == `gzip` {
+		// Обработка сжатого тела запроса
+		if r.Header.Get("Content-Encoding") == "gzip" {
 			gz, err := gzip.NewReader(r.Body)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			reader = gz
-			defer gz.Close()
-		} else {
-			reader = r.Body
+			// Заменяем r.Body на декомпрессированный поток
+			r.Body = io.NopCloser(gz)
+			// Не закрываем gz здесь, так как обработчик сам прочитает r.Body и закроет его
 		}
 
-		body, err := io.ReadAll(reader)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		fmt.Fprintf(w, "Length: %d", len(body))
-		// проверяем, что клиент поддерживает gzip-сжатие
-		// это упрощённый пример. В реальном приложении следует проверять все
-		// значения r.Header.Values("Accept-Encoding") и разбирать строку
-		// на составные части, чтобы избежать неожиданных результатов
+		// Если клиент не поддерживает gzip-ответ, передаём запрос без изменений
 		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-			// если gzip не поддерживается, передаём управление
-			// дальше без изменений
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// создаём gzip.Writer поверх текущего w
-		gz, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
-		if err != nil {
-			io.WriteString(w, err.Error())
-			return
-		}
+		// Оборачиваем ResponseWriter для сжатия ответа
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
 		defer gz.Close()
 
-		w.Header().Set("Content-Encoding", "gzip")
-		// передаём обработчику страницы переменную типа gzipWriter для вывода данных
+		// Передаём управление обработчику с обёрнутым writer-ом
 		next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gz}, r)
 	})
 }
