@@ -3,7 +3,6 @@ package gzipmiddleware
 import (
 	"bytes"
 	"compress/gzip"
-	"io"
 	"net/http"
 	"strings"
 )
@@ -35,39 +34,6 @@ func (b *bufferedResponseWriter) WriteHeader(statusCode int) {
 // Write буферизует данные.
 func (b *bufferedResponseWriter) Write(p []byte) (int, error) {
 	return b.buf.Write(p)
-}
-
-// flush отправляет буфер с компрессией или без неё в зависимости от условий.
-func (b *bufferedResponseWriter) flush(r *http.Request) error {
-	// Если заголовок Content-Type не установлен, попробуем определить его по содержимому.
-	contentType := b.Header().Get("Content-Type")
-	if contentType == "" {
-		contentType = http.DetectContentType(b.buf.Bytes())
-	}
-
-	// Определяем, поддерживает ли клиент gzip и соответствует ли тип контента требованиям.
-	shouldCompress := strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") &&
-		(strings.Contains(contentType, "application/json") || strings.Contains(contentType, "text/html"))
-
-	// Перед отправкой устанавливаем статус. Если WriteHeader не вызывался, то по умолчанию статус 200.
-	if !b.wroteHeader {
-		b.statusCode = http.StatusOK
-	}
-	b.ResponseWriter.WriteHeader(b.statusCode)
-
-	if shouldCompress {
-		// Устанавливаем заголовок, удаляем Content-Length
-		b.Header().Set("Content-Encoding", "gzip")
-		b.Header().Del("Content-Length")
-		gz := gzip.NewWriter(b.ResponseWriter)
-		defer gz.Close()
-		_, err := io.Copy(gz, b.buf)
-		return err
-	}
-
-	// Если сжатие не требуется – просто отправляем буфер.
-	_, err := b.ResponseWriter.Write(b.buf.Bytes())
-	return err
 }
 
 // GzipHandle — middleware, который:
