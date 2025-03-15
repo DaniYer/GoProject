@@ -1,10 +1,9 @@
 module github.com/DaniYer/GoProject.git
 
-go 1.24.1
+go  1.22.12
 
 require (
 	github.com/caarlos0/env/v6 v6.10.1
-	github.com/go-chi/chi v1.5.5
 	github.com/go-chi/chi/v5 v5.2.1
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.10.0
