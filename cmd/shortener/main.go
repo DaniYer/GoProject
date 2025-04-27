@@ -67,6 +67,7 @@ func main() {
 	if err := http.ListenAndServe(cfg.ServerAddress, r); err != nil {
 		panic(err)
 	}
+	//push
 }
 
 // Функция для загрузки данных из файла
