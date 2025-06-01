@@ -2,41 +2,32 @@ package config
 
 import (
 	"flag"
-	"fmt"
 	"log"
 
 	"github.com/caarlos0/env/v6"
 )
 
 type Config struct {
-	A string `env:"SERVER_ADDRESS"`
-	B string `env:"BASE_URL"`
-	F string `env:"FILE_STORAGE_PATH"`
-	D string `env:"DATABASE_DSN"`
+	A string `env:"SERVER_ADDRESS" envDefault:"localhost:8080"`
+	B string `env:"BASE_URL" envDefault:"http://localhost:8080"`
+	F string `env:"FILE_STORAGE_PATH" envDefault:"./storage.json"`
+	D string `env:"DATABASE_DSN" envDefault:"host=localhost user=videos password=userpassword dbname=urls sslmode=disable"`
 }
 
 func ConfigInit() *Config {
+	cfg := Config{}
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable",
-		"localhost", "videos", "userpassword", "urls")
-	flagA := flag.String("a", "localhost:8080", "Адрес сервера")
-	flagB := flag.String("b", "http://localhost:8080", "Базовый URL")
-	flagF := flag.String("f", "./storage.json", "Путь до файла")
-	flagD := flag.String("d", dsn, "DSN для базы данных")
-
-	flag.Parse()
-	//add
-	cfg := Config{
-		A: *flagA,
-		B: *flagB,
-		F: *flagF,
-		D: *flagD,
-	}
-
-	err := env.Parse(&cfg)
-	if err != nil {
+	// Сначала читаем переменные окружения
+	if err := env.Parse(&cfg); err != nil {
 		log.Fatalf("Ошибка чтения переменных окружения: %v", err)
 	}
+
+	// Потом уже парсим флаги
+	flag.StringVar(&cfg.A, "a", cfg.A, "Адрес сервера")
+	flag.StringVar(&cfg.B, "b", cfg.B, "Базовый URL")
+	flag.StringVar(&cfg.F, "f", cfg.F, "Путь до файла")
+	flag.StringVar(&cfg.D, "d", cfg.D, "DSN для базы данных")
+	flag.Parse()
 
 	return &cfg
 }
