@@ -11,6 +11,12 @@ import (
 	"github.com/google/uuid"
 )
 
+func NewGenerateShortURLHandler(cfg *config.Config, write Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		GenerateShortURLHandler(w, r, cfg, write)
+	}
+}
+
 func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, cfg *config.Config, write Storage) {
 	shortID := generaterandomid.GenerateRandomID()
 

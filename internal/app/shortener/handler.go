@@ -24,6 +24,12 @@ type shortenResponse struct {
 	Result string `json:"result"`
 }
 
+func NewHandleShortenURL(cfg *config.Config, write Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		HandleShortenURL(w, r, cfg, write)
+	}
+}
+
 // HandleShortenURL обрабатывает POST-запрос на сокращение URL
 func HandleShortenURL(w http.ResponseWriter, r *http.Request, cfg *config.Config, write Storage) {
 	var req shortenRequest

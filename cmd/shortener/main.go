@@ -4,12 +4,14 @@ import (
 	"net/http"
 
 	"github.com/DaniYer/GoProject.git/internal/app/config"
+	"github.com/DaniYer/GoProject.git/internal/app/database"
 	gziphandle "github.com/DaniYer/GoProject.git/internal/app/gzipmiddleware"
 	"github.com/DaniYer/GoProject.git/internal/app/logging"
 	"github.com/DaniYer/GoProject.git/internal/app/redirect"
 	"github.com/DaniYer/GoProject.git/internal/app/shortener"
 	"github.com/DaniYer/GoProject.git/internal/app/storage"
 	"github.com/go-chi/chi/v5"
+	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"go.uber.org/zap"
 )
@@ -20,6 +22,7 @@ var (
 )
 
 func main() {
+
 	router := chi.NewRouter()
 
 	logger, err := zap.NewDevelopment()
@@ -41,15 +44,10 @@ func main() {
 
 	router.Use(logging.WithLogging) // Теперь логгер в logging будет работать
 	router.Use(gziphandle.GzipHandle)
-	router.Post("/", func(w http.ResponseWriter, r *http.Request) {
-		shortener.GenerateShortURLHandler(w, r, cfg, write)
-	})
-	router.Get("/{id}", func(w http.ResponseWriter, r *http.Request) {
-		redirect.RedirectToOriginalURL(w, r, read)
-	})
-	router.Post("/api/shorten", func(w http.ResponseWriter, r *http.Request) {
-		shortener.HandleShortenURL(w, r, cfg, write)
-	})
+	router.Post("/", shortener.NewGenerateShortURLHandler(cfg, write))
+	router.Get("/{id}", redirect.NewRedirectToOriginalURL(read))
+	router.Post("/api/shorten", shortener.NewHandleShortenURL(cfg, write))
+	router.Get("/ping", database.Connect(cfg))
 
 	if err := http.ListenAndServe(cfg.A, router); err != nil {
 		sugar.Errorf("RIP %v", err) // исправлено форматирование ошибки
