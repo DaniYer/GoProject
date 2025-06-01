@@ -18,7 +18,7 @@ func ConfigInit() *Config {
 	flagB := flag.String("b", "http://localhost:8080", "Базовый URL")
 	flagF := flag.String("f", "./storage.json", "Путь до файла")
 	flag.Parse()
-
+	//add
 	cfg := Config{
 		A: *flagA,
 		B: *flagB,
