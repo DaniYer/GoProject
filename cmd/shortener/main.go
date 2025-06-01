@@ -41,15 +41,9 @@ func main() {
 
 	router.Use(logging.WithLogging) // Теперь логгер в logging будет работать
 	router.Use(gziphandle.GzipHandle)
-	router.Post("/", func(w http.ResponseWriter, r *http.Request) {
-		shortener.GenerateShortURLHandler(w, r, cfg, write)
-	})
-	router.Get("/{id}", func(w http.ResponseWriter, r *http.Request) {
-		redirect.RedirectToOriginalURL(w, r, read)
-	})
-	router.Post("/api/shorten", func(w http.ResponseWriter, r *http.Request) {
-		shortener.HandleShortenURL(w, r, cfg, write)
-	})
+	router.Post("/", shortener.NewGenerateShortURLHandler(cfg, write))
+	router.Get("/{id}", redirect.NewRedirectToOriginalURL(read))
+	router.Post("/api/shorten", shortener.NewHandleShortenURL(cfg, write))
 
 	if err := http.ListenAndServe(cfg.A, router); err != nil {
 		sugar.Errorf("RIP %v", err) // исправлено форматирование ошибки

@@ -11,6 +11,11 @@ type Reader interface {
 	ReadEvents() (*storage.InMemory, error)
 }
 
+func NewRedirectToOriginalURL(read Reader) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		RedirectToOriginalURL(w, r, read)
+	}
+}
 func RedirectToOriginalURL(w http.ResponseWriter, r *http.Request, read Reader) {
 	data, _ := read.ReadEvents()
 
