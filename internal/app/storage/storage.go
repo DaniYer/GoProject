@@ -40,7 +40,7 @@ func NewFileStorage(filename string) (*FileStorage, error) {
 	}, nil
 }
 
-func (p *FileStorage) WriteEvent(event *Event) error {
+func (f *FileStorage) WriteEvent(event *Event) error {
 	data, err := json.Marshal(event)
 	if err != nil {
 		return err
