@@ -46,15 +46,15 @@ func (f *FileStorage) WriteEvent(event *Event) error {
 		return err
 	}
 
-	if _, err := p.writer.Write(data); err != nil {
+	if _, err := f.writer.Write(data); err != nil {
 		return err
 	}
 
-	if err := p.writer.WriteByte('\n'); err != nil {
+	if err := f.writer.WriteByte('\n'); err != nil {
 		return err
 	}
 
-	return p.writer.Flush()
+	return f.writer.Flush()
 }
 
 type Consumer struct {
