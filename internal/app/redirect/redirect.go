@@ -7,13 +7,17 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func RedirectToOriginalURL(w http.ResponseWriter, r *http.Request, read *storage.Consumer) {
+type Reader interface {
+	ReadEvents() (*storage.InMemory, error)
+}
+
+func RedirectToOriginalURL(w http.ResponseWriter, r *http.Request, read Reader) {
 	data, _ := read.ReadEvents()
 
 	// получаем короткий идентификатор из URL
 	shortID := chi.URLParam(r, "id")
 
-	for _, value := range data {
+	for _, value := range data.Data() {
 		if value.ShortURL == shortID {
 			http.Redirect(w, r, value.OriginalURL, http.StatusTemporaryRedirect)
 			return // Завершаем выполнение, если найдено соответствие

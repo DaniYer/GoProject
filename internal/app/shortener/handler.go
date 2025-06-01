@@ -10,6 +10,10 @@ import (
 	"github.com/google/uuid"
 )
 
+type Storage interface {
+	WriteEvent(*storage.Event) error
+}
+
 // структура для JSON-запроса
 type shortenRequest struct {
 	URL string `json:"url"`
@@ -21,7 +25,7 @@ type shortenResponse struct {
 }
 
 // HandleShortenURL обрабатывает POST-запрос на сокращение URL
-func HandleShortenURL(w http.ResponseWriter, r *http.Request, cfg *config.Config, write *storage.Producer) {
+func HandleShortenURL(w http.ResponseWriter, r *http.Request, cfg *config.Config, write Storage) {
 	var req shortenRequest
 
 	// Декодируем JSON-запрос

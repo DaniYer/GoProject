@@ -36,7 +36,7 @@ func main() {
 		"Starting server",
 		"addr", cfg.A,
 	)
-	write, _ := storage.NewProducer(cfg.F)
+	write, _ := storage.NewFileStorage(cfg.F)
 	read, _ := storage.NewConsumer(cfg.F)
 
 	router.Use(logging.WithLogging) // Теперь логгер в logging будет работать

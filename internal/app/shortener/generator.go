@@ -3,6 +3,7 @@ package shortener
 import (
 	"io"
 	"net/http"
+	"net/url"
 
 	"github.com/DaniYer/GoProject.git/internal/app/config"
 	generaterandomid "github.com/DaniYer/GoProject.git/internal/app/randomid"
@@ -10,7 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, cfg *config.Config, write *storage.Producer) {
+func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, cfg *config.Config, write Storage) {
 	shortID := generaterandomid.GenerateRandomID()
 
 	// читаем тело запроса
@@ -19,7 +20,11 @@ func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, cfg *config
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	defer r.Body.Close()
+
+	if _, err = url.Parse(string(body)); err != nil {
+		http.Error(w, "Invalid URL format", http.StatusBadRequest)
+		return
+	}
 
 	eventID := uuid.New().String()
 
