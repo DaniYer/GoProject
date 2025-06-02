@@ -22,7 +22,7 @@ var (
 )
 
 func main() {
-
+	db := database.ConnectDB(cfg)
 	router := chi.NewRouter()
 
 	logger, err := zap.NewDevelopment()
@@ -44,10 +44,10 @@ func main() {
 
 	router.Use(logging.WithLogging) // Теперь логгер в logging будет работать
 	router.Use(gziphandle.GzipHandle)
-	router.Post("/", shortener.NewGenerateShortURLHandler(cfg, write))
+	router.Post("/", shortener.NewGenerateShortURLHandler(cfg, write, db))
 	router.Get("/{id}", redirect.NewRedirectToOriginalURL(read))
-	router.Post("/api/shorten", shortener.NewHandleShortenURL(cfg, write))
-	router.Get("/ping", database.Connect(cfg))
+	router.Post("/api/shorten", shortener.NewHandleShortenURL(cfg, write, db))
+	router.Get("/ping", database.PingDb(db))
 
 	if err := http.ListenAndServe(cfg.A, router); err != nil {
 		sugar.Errorf("RIP %v", err) // исправлено форматирование ошибки

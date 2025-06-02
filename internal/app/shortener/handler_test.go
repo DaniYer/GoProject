@@ -2,6 +2,7 @@ package shortener
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -16,7 +17,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Тест на валидный JSON запрос
+// создадим обёртку-адаптер для старого файлового стораджа под новый интерфейс Storage
+type FileStorageAdapter struct {
+	*storage.FileStorage
+}
+
+func (f *FileStorageAdapter) WriteEvent(event *storage.Event, db *sql.DB) error {
+	return f.FileStorage.WriteEvent(event, nil)
+}
+
 func TestHandleShortenURL_Valid(t *testing.T) {
 	cfg := &config.Config{B: "http://localhost:8080"}
 
@@ -26,12 +35,13 @@ func TestHandleShortenURL_Valid(t *testing.T) {
 
 	fileStorage, err := storage.NewFileStorage(tmpFile.Name())
 	require.NoError(t, err)
+	adapter := &FileStorageAdapter{fileStorage}
 
 	reqBody := `{"url": "http://example.com"}`
 	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(reqBody))
 	rec := httptest.NewRecorder()
 
-	HandleShortenURL(rec, req, cfg, fileStorage)
+	HandleShortenURL(rec, req, cfg, adapter, nil)
 	res := rec.Result()
 	defer res.Body.Close()
 
@@ -52,7 +62,6 @@ func TestHandleShortenURL_Valid(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, inMemory.Data())
 
-	// Проверяем, что URL записан в InMemory
 	found := false
 	for _, event := range inMemory.Data() {
 		if event.OriginalURL == "http://example.com" {
@@ -63,7 +72,6 @@ func TestHandleShortenURL_Valid(t *testing.T) {
 	assert.True(t, found, "original URL должен быть записан в файл")
 }
 
-// Тест на невалидный JSON
 func TestHandleShortenURL_InvalidJSON(t *testing.T) {
 	cfg := &config.Config{B: "http://localhost:8080"}
 
@@ -73,12 +81,13 @@ func TestHandleShortenURL_InvalidJSON(t *testing.T) {
 
 	fileStorage, err := storage.NewFileStorage(tmpFile.Name())
 	require.NoError(t, err)
+	adapter := &FileStorageAdapter{fileStorage}
 
 	reqBody := "invalid json"
 	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(reqBody))
 	rec := httptest.NewRecorder()
 
-	HandleShortenURL(rec, req, cfg, fileStorage)
+	HandleShortenURL(rec, req, cfg, adapter, nil)
 	res := rec.Result()
 	defer res.Body.Close()
 
@@ -88,7 +97,6 @@ func TestHandleShortenURL_InvalidJSON(t *testing.T) {
 	assert.Contains(t, string(body), "Invalid JSON format")
 }
 
-// Тест на ошибку записи
 func TestHandleShortenURL_WriteError(t *testing.T) {
 	cfg := &config.Config{B: "http://localhost:8080"}
 
@@ -98,13 +106,15 @@ func TestHandleShortenURL_WriteError(t *testing.T) {
 
 	fileStorage, err := storage.NewFileStorage(tmpFile.Name())
 	require.NoError(t, err)
-	require.NoError(t, fileStorage.CloseFile()) // симулируем ошибку записи
+	require.NoError(t, fileStorage.CloseFile())
+
+	adapter := &FileStorageAdapter{fileStorage}
 
 	reqBody := `{"url": "http://example.com"}`
 	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(reqBody))
 	rec := httptest.NewRecorder()
 
-	HandleShortenURL(rec, req, cfg, fileStorage)
+	HandleShortenURL(rec, req, cfg, adapter, nil)
 	res := rec.Result()
 
 	defer res.Body.Close()

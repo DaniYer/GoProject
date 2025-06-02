@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bufio"
+	"database/sql"
 	"encoding/json"
 	"os"
 )
@@ -40,7 +41,11 @@ func NewFileStorage(filename string) (*FileStorage, error) {
 	}, nil
 }
 
-func (f *FileStorage) WriteEvent(event *Event) error {
+func (f *FileStorage) WriteEvent(event *Event, db *sql.DB) error {
+	_, err := db.Exec(
+		`INSERT INTO urls (uuid, short_url, original_url) VALUES ($1, $2, $3) ON CONFLICT (short_url) DO NOTHING`,
+		event.UUID, event.ShortURL, event.OriginalURL,
+	)
 	data, err := json.Marshal(event)
 	if err != nil {
 		return err

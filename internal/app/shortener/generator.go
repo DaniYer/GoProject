@@ -1,6 +1,7 @@
 package shortener
 
 import (
+	"database/sql"
 	"io"
 	"net/http"
 	"net/url"
@@ -11,15 +12,14 @@ import (
 	"github.com/google/uuid"
 )
 
-func NewGenerateShortURLHandler(cfg *config.Config, write Storage) http.HandlerFunc {
+func NewGenerateShortURLHandler(cfg *config.Config, write Storage, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		GenerateShortURLHandler(w, r, cfg, write)
+		GenerateShortURLHandler(w, r, cfg, write, db)
 	}
 }
 
-func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, cfg *config.Config, write Storage) {
+func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, cfg *config.Config, write Storage, db *sql.DB) {
 	shortID := generaterandomid.GenerateRandomID()
-
 	// читаем тело запроса
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -41,7 +41,7 @@ func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, cfg *config
 	}
 
 	// Записываем событие, проверяем ошибку записи
-	if err := write.WriteEvent(&event); err != nil {
+	if err := write.WriteEvent(&event, db); err != nil {
 		http.Error(w, "Failed to write event", http.StatusInternalServerError)
 		return
 	}

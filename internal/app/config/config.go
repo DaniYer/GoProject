@@ -11,7 +11,7 @@ type Config struct {
 	A string `env:"SERVER_ADDRESS" envDefault:"localhost:8080"`
 	B string `env:"BASE_URL" envDefault:"http://localhost:8080"`
 	F string `env:"FILE_STORAGE_PATH" envDefault:"./storage.json"`
-	D string `env:"DATABASE_DSN" envDefault:"host=localhost user=videos password=userpassword dbname=urls sslmode=disable"`
+	D string `env:"DATABASE_DSN" envDefault:"host=localhost user=postgres password=sqwaed21 dbname=urls sslmode=disable"`
 }
 
 func ConfigInit() *Config {

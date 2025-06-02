@@ -1,6 +1,7 @@
 package shortener
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 
@@ -11,7 +12,7 @@ import (
 )
 
 type Storage interface {
-	WriteEvent(*storage.Event) error
+	WriteEvent(*storage.Event, *sql.DB) error
 }
 
 // структура для JSON-запроса
@@ -24,14 +25,14 @@ type shortenResponse struct {
 	Result string `json:"result"`
 }
 
-func NewHandleShortenURL(cfg *config.Config, write Storage) http.HandlerFunc {
+func NewHandleShortenURL(cfg *config.Config, write Storage, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		HandleShortenURL(w, r, cfg, write)
+		HandleShortenURL(w, r, cfg, write, db)
 	}
 }
 
 // HandleShortenURL обрабатывает POST-запрос на сокращение URL
-func HandleShortenURL(w http.ResponseWriter, r *http.Request, cfg *config.Config, write Storage) {
+func HandleShortenURL(w http.ResponseWriter, r *http.Request, cfg *config.Config, write Storage, db *sql.DB) {
 	var req shortenRequest
 
 	// Декодируем JSON-запрос
@@ -51,9 +52,8 @@ func HandleShortenURL(w http.ResponseWriter, r *http.Request, cfg *config.Config
 		ShortURL:    shortID,
 		OriginalURL: req.URL,
 	}
-
 	// Записываем событие, проверяем ошибку записи
-	if err := write.WriteEvent(&event); err != nil {
+	if err := write.WriteEvent(&event, db); err != nil {
 		http.Error(w, "Failed to write event", http.StatusInternalServerError)
 		return
 	}
