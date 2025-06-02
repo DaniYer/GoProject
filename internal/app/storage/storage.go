@@ -46,6 +46,10 @@ func (f *FileStorage) WriteEvent(event *Event, db *sql.DB) error {
 		`INSERT INTO urls (uuid, short_url, original_url) VALUES ($1, $2, $3) ON CONFLICT (short_url) DO NOTHING`,
 		event.UUID, event.ShortURL, event.OriginalURL,
 	)
+	if err != nil {
+		return err
+	}
+
 	data, err := json.Marshal(event)
 	if err != nil {
 		return err

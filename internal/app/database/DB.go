@@ -9,7 +9,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-func PingDb(db *sql.DB) http.HandlerFunc {
+func PingDB(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		if err := db.Ping(); err != nil {

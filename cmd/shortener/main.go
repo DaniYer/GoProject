@@ -47,7 +47,7 @@ func main() {
 	router.Post("/", shortener.NewGenerateShortURLHandler(cfg, write, db))
 	router.Get("/{id}", redirect.NewRedirectToOriginalURL(read))
 	router.Post("/api/shorten", shortener.NewHandleShortenURL(cfg, write, db))
-	router.Get("/ping", database.PingDb(db))
+	router.Get("/ping", database.PingDB(db))
 
 	if err := http.ListenAndServe(cfg.A, router); err != nil {
 		sugar.Errorf("RIP %v", err) // исправлено форматирование ошибки
