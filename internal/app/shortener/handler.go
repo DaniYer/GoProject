@@ -12,6 +12,12 @@ import (
 
 var sugar *zap.SugaredLogger
 
+type URLStoreWithDB interface {
+	Save(shortURL, originalURL string) error
+	Get(shortURL string) (string, error)
+	SaveWithConflict(shortURL, originalURL string) (string, error)
+}
+
 // структура для JSON-запроса
 type shortenRequest struct {
 	URL string `json:"url"`
@@ -22,37 +28,51 @@ type shortenResponse struct {
 	Result string `json:"result"`
 }
 
-func NewHandleShortenURL(cfg *config.Config, write URLStore) http.HandlerFunc {
+func NewHandleShortenURL(cfg *config.Config, write URLStoreWithDB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		HandleShortenURL(w, r, cfg, write)
 	}
 }
 
 // HandleShortenURL обрабатывает POST-запрос на сокращение URL
-func HandleShortenURL(w http.ResponseWriter, r *http.Request, cfg *config.Config, write URLStore) {
-
+func HandleShortenURL(w http.ResponseWriter, r *http.Request, cfg *config.Config, write URLStoreWithDB) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Ошибка чтения тела запроса", http.StatusBadRequest)
 		return
 	}
 	defer r.Body.Close()
+
 	var req shortenURL
 	if err := json.Unmarshal(body, &req); err != nil {
 		http.Error(w, "Ошибка парсинга JSON", http.StatusBadRequest)
 		return
 	}
+
 	shortURL := generaterandomid.GenerateRandomID()
-	if err := write.Save(shortURL, req.URL); err != nil {
+
+	// Пытаемся сохранить
+	existingShortURL, err := write.SaveWithConflict(shortURL, req.URL)
+	if err != nil {
 		sugar.Errorf("Ошибка сохранения в хранилище: %v", err)
 		http.Error(w, "Ошибка сохранения", http.StatusInternalServerError)
 		return
 	}
+
 	resp := redirectURL{
-		Result: "http://localhost:8080/" + shortURL,
+		Result: cfg.BaseURL + "/" + existingShortURL,
 	}
+
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
+
+	if existingShortURL != shortURL {
+		// Уже существующий URL
+		w.WriteHeader(http.StatusConflict)
+	} else {
+		// Новый URL
+		w.WriteHeader(http.StatusCreated)
+	}
+
 	json.NewEncoder(w).Encode(resp)
 }
 
