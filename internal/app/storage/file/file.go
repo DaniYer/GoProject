@@ -6,9 +6,15 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/DaniYer/GoProject.git/internal/app/storage"
 	"go.uber.org/zap"
 )
+
+// Record представляет запись для хранения URL.
+type Record struct {
+	UUID        string `json:"uuid"`
+	ShortURL    string `json:"short_url"`
+	OriginalURL string `json:"original_url"`
+}
 
 var sugar *zap.SugaredLogger
 
@@ -28,7 +34,7 @@ func NewFileStore(filePath string) (*FileStore, error) {
 
 func (fs *FileStore) Save(shortURL, originalURL string) error {
 	fs.data[shortURL] = originalURL
-	rec := storage.Record{
+	rec := Record{
 		UUID:        "", // для FileStore не требуется генерация UUID
 		ShortURL:    shortURL,
 		OriginalURL: originalURL,
@@ -58,7 +64,7 @@ func loadStorageFromFile(filePath string) (map[string]string, error) {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
-		var rec storage.Record
+		var rec Record
 		if err := json.Unmarshal([]byte(line), &rec); err != nil {
 			sugar.Errorf("Ошибка парсинга записи: %v", err)
 			continue
