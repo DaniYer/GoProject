@@ -91,3 +91,11 @@ func (fs *FileStore) SaveWithConflict(shortURL, originalURL string) (string, err
 	err := fs.Save(shortURL, originalURL)
 	return shortURL, err
 }
+func (fs *FileStore) GetByOriginalURL(originalURL string) (string, error) {
+	for short, orig := range fs.data {
+		if orig == originalURL {
+			return short, nil
+		}
+	}
+	return "", fmt.Errorf("not found")
+}

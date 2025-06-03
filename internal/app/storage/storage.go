@@ -1,8 +1,11 @@
-package storage
+package shortener
 
-// Record представляет запись для хранения URL.
-type Record struct {
-	UUID        string `json:"uuid"`
-	ShortURL    string `json:"short_url"`
-	OriginalURL string `json:"original_url"`
+type URLStore interface {
+	Save(shortURL, originalURL string) error
+	Get(shortURL string) (string, error)
+}
+
+type URLStoreWithDBforHandler interface {
+	URLStore
+	GetByOriginalURL(originalURL string) (string, error)
 }
