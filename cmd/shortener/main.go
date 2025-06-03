@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 
+	"github.com/DaniYer/GoProject.git/internal/app/batch"
 	"github.com/DaniYer/GoProject.git/internal/app/config"
 	gziphandle "github.com/DaniYer/GoProject.git/internal/app/gzipmiddleware"
 	"github.com/DaniYer/GoProject.git/internal/app/logging"
@@ -82,7 +83,7 @@ func main() {
 	router.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
 		ping.PingDB(db, w)
 	})
-
+	router.Post("/api/shorten/batch", batch.NewBatchShortenURLHandler(cfg.BaseURL, store))
 	if err := http.ListenAndServe(cfg.ServerAddress, router); err != nil {
 		sugar.Errorf("RIP %v", err)
 	}
