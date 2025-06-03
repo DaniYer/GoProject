@@ -26,6 +26,7 @@ var (
 )
 
 type URLStore interface {
+	SaveWithConflict(shortURL, originalURL string) (string, error)
 	Save(shortURL, originalURL string) error
 	Get(shortURL string) (string, error)
 }

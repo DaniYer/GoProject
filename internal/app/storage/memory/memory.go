@@ -22,3 +22,7 @@ func (ms *MemoryStore) Get(shortURL string) (string, error) {
 	}
 	return "", fmt.Errorf("not found")
 }
+func (ms *MemoryStore) SaveWithConflict(shortURL, originalURL string) (string, error) {
+	err := ms.Save(shortURL, originalURL)
+	return shortURL, err
+}

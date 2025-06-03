@@ -86,3 +86,8 @@ func appendRecordToFile(rec storage.Record, filePath string) error {
 	_, err = file.Write(append(recBytes, '\n'))
 	return err
 }
+
+func (fs *FileStore) SaveWithConflict(shortURL, originalURL string) (string, error) {
+	err := fs.Save(shortURL, originalURL)
+	return shortURL, err
+}
