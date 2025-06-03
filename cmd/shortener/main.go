@@ -20,9 +20,10 @@ import (
 )
 
 var (
-	sugar *zap.SugaredLogger
-	cfg   = config.NewConfig()
-	db    *sql.DB
+	sugar       *zap.SugaredLogger
+	cfg         = config.NewConfig()
+	db          *sql.DB
+	storeWithDB shortener.URLStoreWithDBforHandler
 )
 
 type URLStore interface {
@@ -43,7 +44,9 @@ func main() {
 			if err := database.CreateTable(db); err != nil {
 				sugar.Errorf("Ошибка создания таблицы: %v", err)
 			} else {
-				store = database.NewDBStore(db)
+				dbStore := database.NewDBStore(db)
+				store = dbStore
+				storeWithDB = dbStore // тут он точно реализует расширенный интерфейс
 			}
 		}
 	}
@@ -55,6 +58,11 @@ func main() {
 		} else {
 			store = fs
 		}
+	}
+
+	if store == nil {
+		sugar.Infof("Используется in-memory хранилище")
+		store = memory.NewMemoryStore()
 	}
 
 	if store == nil {
@@ -80,7 +88,8 @@ func main() {
 
 	router.Post("/", shortener.NewGenerateShortURLHandler(cfg, store))
 	router.Get("/{id}", redirect.NewRedirectToOriginalURL(store))
-	router.Post("/api/shorten", shortener.NewHandleShortenURL(cfg, store))
+	// router.Post("/api/shorten", shortener.NewHandleShortenURL(cfg, store))
+	router.Post("/api/shorten", shortener.NewHandleShortenURL(cfg, storeWithDB))
 	router.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
 		ping.PingDB(db, w)
 	})

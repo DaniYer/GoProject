@@ -9,19 +9,13 @@ import (
 	generaterandomid "github.com/DaniYer/GoProject.git/internal/app/randomid"
 )
 
-// URLStore описывает методы для сохранения и получения URL.
-type URLStore interface {
-	Save(shortURL, originalURL string) error
-	Get(shortURL string) (string, error)
-}
-
-func NewGenerateShortURLHandler(cfg *config.Config, write URLStore) http.HandlerFunc {
+func NewGenerateShortURLHandler(cfg *config.Config, write URLStoreWithDB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		GenerateShortURLHandler(w, r, cfg, write)
 	}
 }
 
-func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, cfg *config.Config, write URLStore) {
+func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, cfg *config.Config, write URLStoreWithDB) {
 	shortID := generaterandomid.GenerateRandomID()
 	// читаем тело запроса
 	body, err := io.ReadAll(r.Body)

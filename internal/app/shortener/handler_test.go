@@ -14,24 +14,32 @@ import (
 	"go.uber.org/zap"
 )
 
-// Мок-реализация интерфейса URLStoreWithDB для тестов
+// Мок-реализация интерфейса URLStoreWithDBforHandler для тестов
 type MockStore struct {
-	SaveWithConflictFunc func(shortURL, originalURL string) (string, error)
+	SaveFunc           func(shortURL, originalURL string) error
+	GetByOriginalURLFn func(originalURL string) (string, error)
 }
 
 func (m *MockStore) Save(shortURL, originalURL string) error {
-	return nil // не используется в этих тестах
+	if m.SaveFunc != nil {
+		return m.SaveFunc(shortURL, originalURL)
+	}
+	return nil
 }
 
 func (m *MockStore) Get(shortURL string) (string, error) {
-	return "", nil
+	return "", nil // не используется в данных тестах
+}
+
+func (m *MockStore) GetByOriginalURL(originalURL string) (string, error) {
+	if m.GetByOriginalURLFn != nil {
+		return m.GetByOriginalURLFn(originalURL)
+	}
+	return "", errors.New("not found")
 }
 
 func (m *MockStore) SaveWithConflict(shortURL, originalURL string) (string, error) {
-	if m.SaveWithConflictFunc != nil {
-		return m.SaveWithConflictFunc(shortURL, originalURL)
-	}
-	return shortURL, nil
+	return "", nil // не используется в новой реализации
 }
 
 func setupLogger() {
@@ -44,10 +52,13 @@ func TestHandleShortenURL_Success(t *testing.T) {
 	cfg := &config.Config{BaseURL: "http://localhost:8080"}
 
 	mockStore := &MockStore{
-		SaveWithConflictFunc: func(shortURL, originalURL string) (string, error) {
+		GetByOriginalURLFn: func(originalURL string) (string, error) {
+			return "", errors.New("not found")
+		},
+		SaveFunc: func(shortURL, originalURL string) error {
 			assert.NotEmpty(t, shortURL)
 			assert.Equal(t, "http://example.com", originalURL)
-			return shortURL, nil
+			return nil
 		},
 	}
 
@@ -55,7 +66,7 @@ func TestHandleShortenURL_Success(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/shorten", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 
-	HandleShortenURL(rec, req, cfg, mockStore)
+	HandleShortenURL(rec, req, cfg, mockStore, sugar)
 
 	res := rec.Result()
 	defer res.Body.Close()
@@ -75,7 +86,7 @@ func TestHandleShortenURL_Conflict(t *testing.T) {
 	cfg := &config.Config{BaseURL: "http://localhost:8080"}
 
 	mockStore := &MockStore{
-		SaveWithConflictFunc: func(shortURL, originalURL string) (string, error) {
+		GetByOriginalURLFn: func(originalURL string) (string, error) {
 			return "existingShortURL", nil
 		},
 	}
@@ -84,7 +95,7 @@ func TestHandleShortenURL_Conflict(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/shorten", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 
-	HandleShortenURL(rec, req, cfg, mockStore)
+	HandleShortenURL(rec, req, cfg, mockStore, sugar)
 
 	res := rec.Result()
 	defer res.Body.Close()
@@ -108,7 +119,7 @@ func TestHandleShortenURL_InvalidJSON(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/shorten", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 
-	HandleShortenURL(rec, req, cfg, mockStore)
+	HandleShortenURL(rec, req, cfg, mockStore, sugar)
 
 	res := rec.Result()
 	defer res.Body.Close()
@@ -122,8 +133,11 @@ func TestHandleShortenURL_SaveError(t *testing.T) {
 	cfg := &config.Config{BaseURL: "http://localhost:8080"}
 
 	mockStore := &MockStore{
-		SaveWithConflictFunc: func(shortURL, originalURL string) (string, error) {
-			return "", errors.New("some db error")
+		GetByOriginalURLFn: func(originalURL string) (string, error) {
+			return "", errors.New("not found")
+		},
+		SaveFunc: func(shortURL, originalURL string) error {
+			return errors.New("some db error")
 		},
 	}
 
@@ -131,7 +145,7 @@ func TestHandleShortenURL_SaveError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/shorten", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 
-	HandleShortenURL(rec, req, cfg, mockStore)
+	HandleShortenURL(rec, req, cfg, mockStore, sugar)
 
 	res := rec.Result()
 	defer res.Body.Close()

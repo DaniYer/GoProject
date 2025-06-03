@@ -18,6 +18,13 @@ type URLStoreWithDB interface {
 	SaveWithConflict(shortURL, originalURL string) (string, error)
 }
 
+type URLStoreWithDBforHandler interface {
+	Save(shortURL, originalURL string) error
+	Get(shortURL string) (string, error)
+	SaveWithConflict(shortURL, originalURL string) (string, error)
+	GetByOriginalURL(originalURL string) (string, error)
+}
+
 // структура для JSON-запроса
 type shortenRequest struct {
 	URL string `json:"url"`
@@ -28,14 +35,14 @@ type shortenResponse struct {
 	Result string `json:"result"`
 }
 
-func NewHandleShortenURL(cfg *config.Config, write URLStoreWithDB) http.HandlerFunc {
+func NewHandleShortenURL(cfg *config.Config, write URLStoreWithDBforHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		HandleShortenURL(w, r, cfg, write)
+		HandleShortenURL(w, r, cfg, write, sugar)
 	}
 }
 
 // HandleShortenURL обрабатывает POST-запрос на сокращение URL
-func HandleShortenURL(w http.ResponseWriter, r *http.Request, cfg *config.Config, write URLStoreWithDB) {
+func HandleShortenURL(w http.ResponseWriter, r *http.Request, cfg *config.Config, store URLStoreWithDBforHandler, logger *zap.SugaredLogger) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Ошибка чтения тела запроса", http.StatusBadRequest)
@@ -49,30 +56,33 @@ func HandleShortenURL(w http.ResponseWriter, r *http.Request, cfg *config.Config
 		return
 	}
 
+	// Пытаемся проверить, есть ли уже такой URL в БД:
+	existingShortURL, err := store.GetByOriginalURL(req.URL)
+	if err == nil {
+		// Нашли дубликат — возвращаем 409
+		resp := redirectURL{
+			Result: cfg.BaseURL + "/" + existingShortURL,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(resp)
+		return
+	}
+
+	// Создаем новый короткий URL
 	shortURL := generaterandomid.GenerateRandomID()
 
-	// Пытаемся сохранить
-	existingShortURL, err := write.SaveWithConflict(shortURL, req.URL)
-	if err != nil {
-		sugar.Errorf("Ошибка сохранения в хранилище: %v", err)
+	if err := store.Save(shortURL, req.URL); err != nil {
+		logger.Errorf("Ошибка сохранения: %v", err)
 		http.Error(w, "Ошибка сохранения", http.StatusInternalServerError)
 		return
 	}
 
 	resp := redirectURL{
-		Result: cfg.BaseURL + "/" + existingShortURL,
+		Result: cfg.BaseURL + "/" + shortURL,
 	}
-
 	w.Header().Set("Content-Type", "application/json")
-
-	if existingShortURL != shortURL {
-		// Уже существующий URL
-		w.WriteHeader(http.StatusConflict)
-	} else {
-		// Новый URL
-		w.WriteHeader(http.StatusCreated)
-	}
-
+	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(resp)
 }
 
