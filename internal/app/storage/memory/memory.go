@@ -28,7 +28,7 @@ func (m *MemoryStore) Get(shortURL string) (string, error) {
 	defer m.mu.RUnlock()
 	originalURL, ok := m.data[shortURL]
 	if !ok {
-		return "", errors.New("URL not found")
+		return "", errors.New("url not found")
 	}
 	return originalURL, nil
 }
@@ -41,5 +41,5 @@ func (m *MemoryStore) GetByOriginalURL(originalURL string) (string, error) {
 			return short, nil
 		}
 	}
-	return "", errors.New("Original URL not found")
+	return "", errors.New("original url not found")
 }
