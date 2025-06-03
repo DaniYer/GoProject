@@ -46,7 +46,7 @@ func main() {
 			} else {
 				dbStore := database.NewDBStore(db)
 				store = dbStore
-				storeWithDB = dbStore // тут он точно реализует расширенный интерфейс
+				storeWithDB = dbStore // он реализует расширенный интерфейс
 			}
 		}
 	}
@@ -58,11 +58,6 @@ func main() {
 		} else {
 			store = fs
 		}
-	}
-
-	if store == nil {
-		sugar.Infof("Используется in-memory хранилище")
-		store = memory.NewMemoryStore()
 	}
 
 	if store == nil {
@@ -85,23 +80,17 @@ func main() {
 
 	router.Use(logging.WithLogging)
 	router.Use(gziphandle.GzipHandle)
-	router.Post("/", shortener.NewHandleShortenURLv13(cfg, storeWithDB))                // для iteration 13 POST /
-	router.Post("/api/shorten", shortener.NewHandleShortenURLv7(cfg, store))            // для iteration 7 POST /api/shorten
-	router.Post("/api/shorten_v13", shortener.NewHandleShortenURLv13(cfg, storeWithDB)) // на будущее - оставить
 
-	// router.Post("/", shortener.NewGenerateShortURLHandler(cfg, store))
+	router.Post("/", shortener.NewGenerateShortURLHandler(cfg, storeWithDB))        // Итерация 1 и 13
+	router.Post("/api/shorten", shortener.NewHandleShortenURLv13(cfg, storeWithDB)) // Итерация 7 и 13
+
 	router.Get("/{id}", redirect.NewRedirectToOriginalURL(store))
-	// router.Post("/api/shorten", shortener.NewHandleShortenURLv7(cfg, store))
-	// router.Post("/api/shorten_v13", shortener.NewHandleShortenURLv13(cfg, storeWithDB))
 	router.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
 		ping.PingDB(db, w)
 	})
 	router.Post("/api/shorten/batch", batch.NewBatchShortenURLHandler(cfg.BaseURL, store))
+
 	if err := http.ListenAndServe(cfg.ServerAddress, router); err != nil {
 		sugar.Errorf("RIP %v", err)
 	}
 }
-
-// This is the main entry point for the URL shortener service.
-// It initializes the configuration, sets up the database or file storage,
-// configures the HTTP router with the necessary handlers, and starts the HTTP server.

@@ -3,37 +3,47 @@ package shortener
 import (
 	"io"
 	"net/http"
-	"net/url"
 
 	"github.com/DaniYer/GoProject.git/internal/app/config"
 	generaterandomid "github.com/DaniYer/GoProject.git/internal/app/randomid"
+	"go.uber.org/zap"
 )
 
-func NewGenerateShortURLHandler(cfg *config.Config, write URLStoreWithDB) http.HandlerFunc {
+var sugar *zap.SugaredLogger
+
+func NewGenerateShortURLHandler(cfg *config.Config, store URLStoreWithDBforHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		GenerateShortURLHandler(w, r, cfg, write)
+		GenerateShortURLHandler(w, r, cfg, store, sugar)
 	}
 }
 
-func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, cfg *config.Config, write URLStoreWithDB) {
-	shortID := generaterandomid.GenerateRandomID()
-	// читаем тело запроса
+func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, cfg *config.Config, store URLStoreWithDBforHandler, logger *zap.SugaredLogger) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		http.Error(w, "Ошибка чтения тела запроса", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	originalURL := string(body)
+
+	existingShortURL, err := store.GetByOriginalURL(originalURL)
+	if err == nil {
+		// Нашли дубликат — возвращаем 409
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusConflict)
+		w.Write([]byte(cfg.BaseURL + "/" + existingShortURL))
 		return
 	}
 
-	if _, err = url.Parse(string(body)); err != nil {
-		http.Error(w, "Invalid URL format", http.StatusBadRequest)
+	shortID := generaterandomid.GenerateRandomID()
+
+	if err := store.Save(shortID, originalURL); err != nil {
+		logger.Errorf("Ошибка сохранения: %v", err)
+		http.Error(w, "Ошибка сохранения", http.StatusInternalServerError)
 		return
 	}
 
-	// Записываем событие, проверяем ошибку записи
-	if err := write.Save(shortID, string(body)); err != nil {
-		http.Error(w, "Failed to save URL", http.StatusInternalServerError)
-		return
-	}
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(cfg.BaseURL + "/" + shortID))
