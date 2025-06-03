@@ -78,7 +78,7 @@ func loadStorageFromFile(filePath string) (map[string]string, error) {
 }
 
 // appendRecordToFile дописывает запись в файл.
-func appendRecordToFile(rec storage.Record, filePath string) error {
+func appendRecordToFile(rec Record, filePath string) error {
 	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
