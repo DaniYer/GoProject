@@ -6,7 +6,7 @@ import (
 
 	"github.com/DaniYer/GoProject.git/internal/app/batch"
 	"github.com/DaniYer/GoProject.git/internal/app/config"
-	gziphandle "github.com/DaniYer/GoProject.git/internal/app/gzipmiddleware"
+	"github.com/DaniYer/GoProject.git/internal/app/gzipmiddleware"
 	"github.com/DaniYer/GoProject.git/internal/app/logging"
 	"github.com/DaniYer/GoProject.git/internal/app/ping"
 	"github.com/DaniYer/GoProject.git/internal/app/redirect"
@@ -20,23 +20,25 @@ import (
 )
 
 var (
-	sugar       *zap.SugaredLogger
 	cfg         = config.NewConfig()
 	db          *sql.DB
+	store       shortener.URLStore
 	storeWithDB shortener.URLStoreWithDBforHandler
+	sugar       *zap.SugaredLogger
 )
 
-type URLStore interface {
-	SaveWithConflict(shortURL, originalURL string) (string, error)
-	Save(shortURL, originalURL string) error
-	Get(shortURL string) (string, error)
-}
-
 func main() {
-	var store URLStore
+	// Создаем логгер
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		panic(err)
+	}
+	defer logger.Sync()
+
+	sugar = logger.Sugar()
+	logging.InitLogger(sugar)
 
 	if cfg.DatabaseDSN != "" && cfg.DatabaseDSN != "localDB" {
-		var err error
 		db, err = database.InitDB("pgx", cfg.DatabaseDSN)
 		if err != nil {
 			sugar.Errorf("Ошибка подключения к БД: %v", err)
@@ -46,7 +48,7 @@ func main() {
 			} else {
 				dbStore := database.NewDBStore(db)
 				store = dbStore
-				storeWithDB = dbStore // он реализует расширенный интерфейс
+				storeWithDB = dbStore
 			}
 		}
 	}
@@ -62,32 +64,23 @@ func main() {
 
 	if store == nil {
 		sugar.Infof("Используется in-memory хранилище")
-		store = memory.NewMemoryStore()
+		memStore := memory.NewMemoryStore()
+		store = memStore
+		storeWithDB = memStore
 	}
 
 	router := chi.NewRouter()
 
-	logger, err := zap.NewDevelopment()
-	if err != nil {
-		panic(err)
-	}
-	defer logger.Sync()
-
-	sugar = logger.Sugar()
-	logging.InitLogger(sugar)
-
 	sugar.Infow("Starting server", "addr", cfg.ServerAddress)
 
 	router.Use(logging.WithLogging)
-	router.Use(gziphandle.GzipHandle)
+	router.Use(gzipmiddleware.GzipHandle)
 
+	// Роуты
 	router.Post("/", shortener.NewGenerateShortURLHandler(cfg, storeWithDB, sugar))
 	router.Post("/api/shorten", shortener.NewHandleShortenURLv13(cfg, storeWithDB, sugar))
-
 	router.Get("/{id}", redirect.NewRedirectToOriginalURL(store))
-	router.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
-		ping.PingDB(db, w)
-	})
+	router.Get("/ping", func(w http.ResponseWriter, r *http.Request) { ping.PingDB(db, w) })
 	router.Post("/api/shorten/batch", batch.NewBatchShortenURLHandler(cfg.BaseURL, store))
 
 	if err := http.ListenAndServe(cfg.ServerAddress, router); err != nil {

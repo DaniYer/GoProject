@@ -10,14 +10,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// Интерфейс для хранилища (расширенный)
-type URLStoreWithDBforHandler interface {
-	Save(shortURL, originalURL string) error
-	Get(shortURL string) (string, error)
-	GetByOriginalURL(originalURL string) (string, error)
-}
-
-// Структуры для JSON-запроса и ответа
 type shortenRequest struct {
 	URL string `json:"url"`
 }
@@ -35,7 +27,7 @@ func NewHandleShortenURLv13(cfg *config.Config, store URLStoreWithDBforHandler, 
 func HandleShortenURLv13(w http.ResponseWriter, r *http.Request, cfg *config.Config, store URLStoreWithDBforHandler, logger *zap.SugaredLogger) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Ошибка чтения тела запроса", http.StatusBadRequest)
+		http.Error(w, "Ошибка чтения тела", http.StatusBadRequest)
 		return
 	}
 	defer r.Body.Close()
@@ -48,9 +40,7 @@ func HandleShortenURLv13(w http.ResponseWriter, r *http.Request, cfg *config.Con
 
 	existingShortURL, err := store.GetByOriginalURL(req.URL)
 	if err == nil {
-		resp := shortenResponse{
-			Result: cfg.BaseURL + "/" + existingShortURL,
-		}
+		resp := shortenResponse{Result: cfg.BaseURL + "/" + existingShortURL}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(resp)
@@ -65,9 +55,7 @@ func HandleShortenURLv13(w http.ResponseWriter, r *http.Request, cfg *config.Con
 		return
 	}
 
-	resp := shortenResponse{
-		Result: cfg.BaseURL + "/" + shortID,
-	}
+	resp := shortenResponse{Result: cfg.BaseURL + "/" + shortID}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(resp)

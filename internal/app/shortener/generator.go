@@ -18,7 +18,7 @@ func NewGenerateShortURLHandler(cfg *config.Config, store URLStoreWithDBforHandl
 func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, cfg *config.Config, store URLStoreWithDBforHandler, logger *zap.SugaredLogger) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Ошибка чтения тела запроса", http.StatusBadRequest)
+		http.Error(w, "Ошибка чтения тела", http.StatusBadRequest)
 		return
 	}
 	defer r.Body.Close()
