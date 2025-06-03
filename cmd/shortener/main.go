@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"net/http"
 
 	"github.com/DaniYer/GoProject.git/internal/app/config"
@@ -21,6 +22,7 @@ import (
 var (
 	sugar *zap.SugaredLogger
 	cfg   = config.NewConfig()
+	db    *sql.DB
 )
 
 // URLStore описывает методы для сохранения и получения URL.
@@ -85,7 +87,7 @@ func main() {
 	router.Get("/{id}", redirect.NewRedirectToOriginalURL(store))
 	router.Post("/api/shorten", shortener.NewHandleShortenURL(cfg, store))
 	router.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
-		ping.PingDB(w, r, cfg.DatabaseDSN)
+		ping.PingDB(db, w)
 	})
 
 	if err := http.ListenAndServe(cfg.ServerAddress, router); err != nil {
