@@ -10,16 +10,10 @@ import (
 	"go.uber.org/zap"
 )
 
-type URLStoreWithDB interface {
-	Save(shortURL, originalURL string) error
-	Get(shortURL string) (string, error)
-	SaveWithConflict(shortURL, originalURL string) (string, error)
-}
-
+// Интерфейс для хранилища (расширенный)
 type URLStoreWithDBforHandler interface {
 	Save(shortURL, originalURL string) error
 	Get(shortURL string) (string, error)
-	SaveWithConflict(shortURL, originalURL string) (string, error)
 	GetByOriginalURL(originalURL string) (string, error)
 }
 
@@ -32,10 +26,9 @@ type shortenResponse struct {
 	Result string `json:"result"`
 }
 
-// Хендлер для /api/shorten (JSON)
-func NewHandleShortenURLv13(cfg *config.Config, store URLStoreWithDBforHandler) http.HandlerFunc {
+func NewHandleShortenURLv13(cfg *config.Config, store URLStoreWithDBforHandler, logger *zap.SugaredLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		HandleShortenURLv13(w, r, cfg, store, sugar)
+		HandleShortenURLv13(w, r, cfg, store, logger)
 	}
 }
 

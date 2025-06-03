@@ -81,8 +81,8 @@ func main() {
 	router.Use(logging.WithLogging)
 	router.Use(gziphandle.GzipHandle)
 
-	router.Post("/", shortener.NewGenerateShortURLHandler(cfg, storeWithDB))        // Итерация 1 и 13
-	router.Post("/api/shorten", shortener.NewHandleShortenURLv13(cfg, storeWithDB)) // Итерация 7 и 13
+	router.Post("/", shortener.NewGenerateShortURLHandler(cfg, storeWithDB, sugar))
+	router.Post("/api/shorten", shortener.NewHandleShortenURLv13(cfg, storeWithDB, sugar))
 
 	router.Get("/{id}", redirect.NewRedirectToOriginalURL(store))
 	router.Get("/ping", func(w http.ResponseWriter, r *http.Request) {

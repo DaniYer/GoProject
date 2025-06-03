@@ -9,11 +9,9 @@ import (
 	"go.uber.org/zap"
 )
 
-var sugar *zap.SugaredLogger
-
-func NewGenerateShortURLHandler(cfg *config.Config, store URLStoreWithDBforHandler) http.HandlerFunc {
+func NewGenerateShortURLHandler(cfg *config.Config, store URLStoreWithDBforHandler, logger *zap.SugaredLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		GenerateShortURLHandler(w, r, cfg, store, sugar)
+		GenerateShortURLHandler(w, r, cfg, store, logger)
 	}
 }
 
@@ -29,7 +27,6 @@ func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, cfg *config
 
 	existingShortURL, err := store.GetByOriginalURL(originalURL)
 	if err == nil {
-		// Нашли дубликат — возвращаем 409
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusConflict)
 		w.Write([]byte(cfg.BaseURL + "/" + existingShortURL))
