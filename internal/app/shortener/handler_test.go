@@ -3,114 +3,141 @@ package shortener
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"strings"
 	"testing"
 
 	"github.com/DaniYer/GoProject.git/internal/app/config"
-	"github.com/DaniYer/GoProject.git/internal/app/storage"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
-// Тест на валидный JSON запрос
-func TestHandleShortenURL_Valid(t *testing.T) {
-	cfg := &config.Config{B: "http://localhost:8080"}
+// Мок-реализация интерфейса URLStoreWithDB для тестов
+type MockStore struct {
+	SaveWithConflictFunc func(shortURL, originalURL string) (string, error)
+}
 
-	tmpFile, err := os.CreateTemp("", "test_filestorage_*.json")
-	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+func (m *MockStore) Save(shortURL, originalURL string) error {
+	return nil // не используется в этих тестах
+}
 
-	fileStorage, err := storage.NewFileStorage(tmpFile.Name())
-	require.NoError(t, err)
+func (m *MockStore) Get(shortURL string) (string, error) {
+	return "", nil
+}
 
-	reqBody := `{"url": "http://example.com"}`
-	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(reqBody))
+func (m *MockStore) SaveWithConflict(shortURL, originalURL string) (string, error) {
+	if m.SaveWithConflictFunc != nil {
+		return m.SaveWithConflictFunc(shortURL, originalURL)
+	}
+	return shortURL, nil
+}
+
+func setupLogger() {
+	sugar = zap.NewNop().Sugar()
+}
+
+func TestHandleShortenURL_Success(t *testing.T) {
+	setupLogger()
+
+	cfg := &config.Config{BaseURL: "http://localhost:8080"}
+
+	mockStore := &MockStore{
+		SaveWithConflictFunc: func(shortURL, originalURL string) (string, error) {
+			assert.NotEmpty(t, shortURL)
+			assert.Equal(t, "http://example.com", originalURL)
+			return shortURL, nil
+		},
+	}
+
+	body := `{"url": "http://example.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/shorten", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 
-	HandleShortenURL(rec, req, cfg, fileStorage)
+	HandleShortenURL(rec, req, cfg, mockStore)
+
 	res := rec.Result()
 	defer res.Body.Close()
 
 	assert.Equal(t, http.StatusCreated, res.StatusCode)
 	assert.Equal(t, "application/json", res.Header.Get("Content-Type"))
 
-	var resp shortenResponse
-	err = json.NewDecoder(res.Body).Decode(&resp)
-	require.NoError(t, err)
-
-	expectedPrefix := cfg.B + "/"
-	assert.True(t, strings.HasPrefix(resp.Result, expectedPrefix))
-
-	// Читаем события из файла
-	consumer, err := storage.NewConsumer(tmpFile.Name())
-	require.NoError(t, err)
-	inMemory, err := consumer.ReadEvents()
-	require.NoError(t, err)
-	require.NotEmpty(t, inMemory.Data())
-
-	// Проверяем, что URL записан в InMemory
-	found := false
-	for _, event := range inMemory.Data() {
-		if event.OriginalURL == "http://example.com" {
-			found = true
-			break
-		}
-	}
-	assert.True(t, found, "original URL должен быть записан в файл")
+	var resp redirectURL
+	err := json.NewDecoder(res.Body).Decode(&resp)
+	assert.NoError(t, err)
+	assert.Contains(t, resp.Result, cfg.BaseURL+"/")
 }
 
-// Тест на невалидный JSON
-func TestHandleShortenURL_InvalidJSON(t *testing.T) {
-	cfg := &config.Config{B: "http://localhost:8080"}
+func TestHandleShortenURL_Conflict(t *testing.T) {
+	setupLogger()
 
-	tmpFile, err := os.CreateTemp("", "test_filestorage_*.json")
-	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	cfg := &config.Config{BaseURL: "http://localhost:8080"}
 
-	fileStorage, err := storage.NewFileStorage(tmpFile.Name())
-	require.NoError(t, err)
+	mockStore := &MockStore{
+		SaveWithConflictFunc: func(shortURL, originalURL string) (string, error) {
+			return "existingShortURL", nil
+		},
+	}
 
-	reqBody := "invalid json"
-	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(reqBody))
+	body := `{"url": "http://example.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/shorten", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 
-	HandleShortenURL(rec, req, cfg, fileStorage)
+	HandleShortenURL(rec, req, cfg, mockStore)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	assert.Equal(t, http.StatusConflict, res.StatusCode)
+	assert.Equal(t, "application/json", res.Header.Get("Content-Type"))
+
+	var resp redirectURL
+	err := json.NewDecoder(res.Body).Decode(&resp)
+	assert.NoError(t, err)
+	assert.Contains(t, resp.Result, cfg.BaseURL+"/existingShortURL")
+}
+
+func TestHandleShortenURL_InvalidJSON(t *testing.T) {
+	setupLogger()
+
+	cfg := &config.Config{BaseURL: "http://localhost:8080"}
+	mockStore := &MockStore{}
+
+	body := `invalid_json`
+	req := httptest.NewRequest(http.MethodPost, "/api/shorten", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+
+	HandleShortenURL(rec, req, cfg, mockStore)
+
 	res := rec.Result()
 	defer res.Body.Close()
 
 	assert.Equal(t, http.StatusBadRequest, res.StatusCode)
-	body, err := io.ReadAll(res.Body)
-	require.NoError(t, err)
-	assert.Contains(t, string(body), "Invalid JSON format")
 }
 
-// Тест на ошибку записи
-func TestHandleShortenURL_WriteError(t *testing.T) {
-	cfg := &config.Config{B: "http://localhost:8080"}
+func TestHandleShortenURL_SaveError(t *testing.T) {
+	setupLogger()
 
-	tmpFile, err := os.CreateTemp("", "test_filestorage_*.json")
-	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	cfg := &config.Config{BaseURL: "http://localhost:8080"}
 
-	fileStorage, err := storage.NewFileStorage(tmpFile.Name())
-	require.NoError(t, err)
-	require.NoError(t, fileStorage.CloseFile()) // симулируем ошибку записи
+	mockStore := &MockStore{
+		SaveWithConflictFunc: func(shortURL, originalURL string) (string, error) {
+			return "", errors.New("some db error")
+		},
+	}
 
-	reqBody := `{"url": "http://example.com"}`
-	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(reqBody))
+	body := `{"url": "http://example.com"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/shorten", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 
-	HandleShortenURL(rec, req, cfg, fileStorage)
-	res := rec.Result()
+	HandleShortenURL(rec, req, cfg, mockStore)
 
+	res := rec.Result()
 	defer res.Body.Close()
 
 	assert.Equal(t, http.StatusInternalServerError, res.StatusCode)
-	body, err := io.ReadAll(res.Body)
-	require.NoError(t, err)
-	assert.Contains(t, string(body), "Failed to write event")
+
+	responseBody, _ := io.ReadAll(res.Body)
+	assert.Contains(t, string(responseBody), "Ошибка сохранения")
 }
