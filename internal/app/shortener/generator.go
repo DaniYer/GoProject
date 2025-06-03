@@ -4,47 +4,47 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/DaniYer/GoProject.git/internal/app/config"
-	generaterandomid "github.com/DaniYer/GoProject.git/internal/app/randomid"
-	"go.uber.org/zap"
+	"github.com/DaniYer/GoProject.git/internal/app/randomid"
+	"github.com/DaniYer/GoProject.git/internal/app/service"
 )
 
-var sugar *zap.SugaredLogger
-
-func NewGenerateShortURLHandler(cfg *config.Config, store URLStoreWithDBforHandler) http.HandlerFunc {
+func NewGenerateShortURLHandler(svc *service.URLService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		GenerateShortURLHandler(w, r, cfg, store, sugar)
+		GenerateShortURLHandler(w, r, svc)
 	}
 }
 
-func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, cfg *config.Config, store URLStoreWithDBforHandler, logger *zap.SugaredLogger) {
+func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, svc *service.URLService) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Ошибка чтения тела запроса", http.StatusBadRequest)
+		http.Error(w, "Ошибка чтения тела", http.StatusBadRequest)
 		return
 	}
 	defer r.Body.Close()
 
 	originalURL := string(body)
 
-	existingShortURL, err := store.GetByOriginalURL(originalURL)
+	existingShortURL, err := svc.Store.GetByOriginalURL(originalURL)
 	if err == nil {
-		// Нашли дубликат — возвращаем 409
+		resultURL := svc.BaseURL + "/" + existingShortURL
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusConflict)
-		w.Write([]byte(cfg.BaseURL + "/" + existingShortURL))
+		w.Write([]byte(resultURL))
 		return
 	}
 
-	shortID := generaterandomid.GenerateRandomID()
+	shortID := randomid.GenerateRandomID()
 
-	if err := store.Save(shortID, originalURL); err != nil {
-		logger.Errorf("Ошибка сохранения: %v", err)
+	shortID, err = svc.Store.Save(shortID, originalURL)
+	if err != nil {
 		http.Error(w, "Ошибка сохранения", http.StatusInternalServerError)
 		return
 	}
 
+	resultURL := svc.BaseURL + "/" + shortID
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(cfg.BaseURL + "/" + shortID))
+	w.Write([]byte(resultURL))
 }
+
+// GenerateShortURLHandler обрабатывает запросы на генерацию коротких URL

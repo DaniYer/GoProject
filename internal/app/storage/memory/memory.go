@@ -1,28 +1,45 @@
 package memory
 
-import "fmt"
+import (
+	"errors"
+	"sync"
+)
 
-// MemoryStore – реализация URLStore с использованием in-memory карты.
 type MemoryStore struct {
+	mu   sync.RWMutex
 	data map[string]string
 }
 
 func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{data: make(map[string]string)}
-}
-
-func (ms *MemoryStore) Save(shortURL, originalURL string) error {
-	ms.data[shortURL] = originalURL
-	return nil
-}
-
-func (ms *MemoryStore) Get(shortURL string) (string, error) {
-	if url, ok := ms.data[shortURL]; ok {
-		return url, nil
+	return &MemoryStore{
+		data: make(map[string]string),
 	}
-	return "", fmt.Errorf("not found")
 }
-func (ms *MemoryStore) SaveWithConflict(shortURL, originalURL string) (string, error) {
-	err := ms.Save(shortURL, originalURL)
-	return shortURL, err
+
+func (m *MemoryStore) Save(shortURL, originalURL string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.data[shortURL] = originalURL
+	return shortURL, nil
+}
+
+func (m *MemoryStore) Get(shortURL string) (string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	originalURL, ok := m.data[shortURL]
+	if !ok {
+		return "", errors.New("url not found")
+	}
+	return originalURL, nil
+}
+
+func (m *MemoryStore) GetByOriginalURL(originalURL string) (string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for short, orig := range m.data {
+		if orig == originalURL {
+			return short, nil
+		}
+	}
+	return "", errors.New("original url not found")
 }
