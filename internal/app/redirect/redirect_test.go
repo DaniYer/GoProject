@@ -2,97 +2,113 @@ package redirect
 
 import (
 	"context"
-	"io"
+	"errors"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
-	"github.com/DaniYer/GoProject.git/internal/app/storage"
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-// createTestConsumer создаёт временный файл с тестовыми данными и возвращает *storage.Consumer.
-func createTestConsumer(t *testing.T) *storage.Consumer {
-	t.Helper()
-
-	// Создаем временный файл.
-	tmpFile, err := os.CreateTemp("", "test_events_*.json")
-	require.NoError(t, err)
-
-	// Пример тестовых событий в формате JSON Lines.
-	events := []string{
-		`{"uuid":"1","short_url":"4rSPg8ap","original_url":"http://yandex.ru"}`,
-		`{"uuid":"2","short_url":"edVPg3ks","original_url":"http://ya.ru"}`,
-		`{"uuid":"3","short_url":"dG56Hqxm","original_url":"http://practicum.yandex.ru"}`,
-	}
-	for _, line := range events {
-		_, err = tmpFile.WriteString(line + "\n")
-		require.NoError(t, err)
-	}
-
-	// Закрываем файл после записи, чтобы затем открыть для чтения.
-	require.NoError(t, tmpFile.Close())
-
-	consumer, err := storage.NewConsumer(tmpFile.Name())
-	require.NoError(t, err)
-
-	// Удаляем временный файл после завершения теста.
-	t.Cleanup(func() {
-		os.Remove(tmpFile.Name())
-	})
-
-	return consumer
+// Мок URLStore для тестов
+type MockStore struct {
+	GetFunc func(shortURL string) (string, error)
 }
 
-func TestRedirectToOriginalURL_Found(t *testing.T) {
-	consumer := createTestConsumer(t)
+func (m *MockStore) Get(shortURL string) (string, error) {
+	if m.GetFunc != nil {
+		return m.GetFunc(shortURL)
+	}
+	return "", nil
+}
 
-	// Создаем HTTP-запрос.
-	req := httptest.NewRequest(http.MethodGet, "/4rSPg8ap", nil)
+func (m *MockStore) Save(shortURL, originalURL string) error {
+	return nil // не используется в этом тесте
+}
 
-	// Создаем chi.RouteContext и добавляем параметр "id" с нужным значением.
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", "4rSPg8ap")
-	// Вставляем rctx в контекст запроса.
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+func TestRedirectToOriginalURL_Success(t *testing.T) {
+	mockStore := &MockStore{
+		GetFunc: func(shortURL string) (string, error) {
+			if shortURL == "abcd1234" {
+				return "http://example.com", nil
+			}
+			return "", errors.New("not found")
+		},
+	}
 
+	req := httptest.NewRequest(http.MethodGet, "/abcd1234", nil)
 	rec := httptest.NewRecorder()
 
-	RedirectToOriginalURL(rec, req, consumer)
+	// корректно вставляем chi.RouteContext в request context
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", "abcd1234")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	RedirectToOriginalURL(rec, req, mockStore)
 
 	res := rec.Result()
 	defer res.Body.Close()
 
-	// Ожидаем, что функция выполнит редирект (HTTP 307).
 	assert.Equal(t, http.StatusTemporaryRedirect, res.StatusCode)
-
-	location, err := res.Location()
-	require.NoError(t, err)
-	// Для shortURL "4rSPg8ap" ожидаем оригинальный URL "http://yandex.ru"
-	assert.Equal(t, "http://yandex.ru", location.String())
+	location := res.Header.Get("Location")
+	assert.Equal(t, "http://example.com", location)
 }
 
 func TestRedirectToOriginalURL_NotFound(t *testing.T) {
-	consumer := createTestConsumer(t)
+	mockStore := &MockStore{
+		GetFunc: func(shortURL string) (string, error) {
+			return "", errors.New("not found")
+		},
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/unknown", nil)
+	rec := httptest.NewRecorder()
+
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", "unknown")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
-	rec := httptest.NewRecorder()
-
-	RedirectToOriginalURL(rec, req, consumer)
+	RedirectToOriginalURL(rec, req, mockStore)
 
 	res := rec.Result()
 	defer res.Body.Close()
 
-	// Если событие не найдено, ожидаем статус 400.
 	assert.Equal(t, http.StatusBadRequest, res.StatusCode)
-	body, err := io.ReadAll(res.Body)
-	require.NoError(t, err)
-	assert.Contains(t, string(body), "URL not found")
+}
+
+func TestRedirectToOriginalURL_EmptyID(t *testing.T) {
+	mockStore := &MockStore{}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", "")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	RedirectToOriginalURL(rec, req, mockStore)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+}
+
+func TestRedirectToOriginalURL_InvalidMethod(t *testing.T) {
+	mockStore := &MockStore{}
+
+	req := httptest.NewRequest(http.MethodPost, "/abcd1234", nil)
+	rec := httptest.NewRecorder()
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", "abcd1234")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	RedirectToOriginalURL(rec, req, mockStore)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, res.StatusCode)
 }

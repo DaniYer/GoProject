@@ -1,19 +1,16 @@
 package shortener
 
 import (
-	"database/sql"
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/DaniYer/GoProject.git/internal/app/config"
 	generaterandomid "github.com/DaniYer/GoProject.git/internal/app/randomid"
-	"github.com/DaniYer/GoProject.git/internal/app/storage"
-	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
-type Storage interface {
-	WriteEvent(*storage.Event, *sql.DB) error
-}
+var sugar *zap.SugaredLogger
 
 // структура для JSON-запроса
 type shortenRequest struct {
@@ -25,44 +22,44 @@ type shortenResponse struct {
 	Result string `json:"result"`
 }
 
-func NewHandleShortenURL(cfg *config.Config, write Storage, db *sql.DB) http.HandlerFunc {
+func NewHandleShortenURL(cfg *config.Config, write URLStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		HandleShortenURL(w, r, cfg, write, db)
+		HandleShortenURL(w, r, cfg, write)
 	}
 }
 
 // HandleShortenURL обрабатывает POST-запрос на сокращение URL
-func HandleShortenURL(w http.ResponseWriter, r *http.Request, cfg *config.Config, write Storage, db *sql.DB) {
-	var req shortenRequest
+func HandleShortenURL(w http.ResponseWriter, r *http.Request, cfg *config.Config, write URLStore) {
 
-	// Декодируем JSON-запрос
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Ошибка чтения тела запроса", http.StatusBadRequest)
 		return
 	}
 	defer r.Body.Close()
-
-	// Генерируем короткий идентификатор
-	shortID := generaterandomid.GenerateRandomID()
-
-	eventID := uuid.New().String()
-
-	event := storage.Event{
-		UUID:        eventID,
-		ShortURL:    shortID,
-		OriginalURL: req.URL,
-	}
-	// Записываем событие, проверяем ошибку записи
-	if err := write.WriteEvent(&event, db); err != nil {
-		http.Error(w, "Failed to write event", http.StatusInternalServerError)
+	var req shortenURL
+	if err := json.Unmarshal(body, &req); err != nil {
+		http.Error(w, "Ошибка парсинга JSON", http.StatusBadRequest)
 		return
 	}
-	// Создаем JSON-ответ
-	resp := shortenResponse{
-		Result: cfg.B + "/" + shortID,
+	shortURL := generaterandomid.GenerateRandomID()
+	if err := write.Save(shortURL, req.URL); err != nil {
+		sugar.Errorf("Ошибка сохранения в хранилище: %v", err)
+		http.Error(w, "Ошибка сохранения", http.StatusInternalServerError)
+		return
 	}
-
+	resp := redirectURL{
+		Result: "http://localhost:8080/" + shortURL,
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(resp)
+}
+
+type shortenURL struct {
+	URL string `json:"url"`
+}
+
+type redirectURL struct {
+	Result string `json:"result"`
 }

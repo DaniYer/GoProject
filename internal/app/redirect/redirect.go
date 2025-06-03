@@ -3,31 +3,35 @@ package redirect
 import (
 	"net/http"
 
-	"github.com/DaniYer/GoProject.git/internal/app/storage"
 	"github.com/go-chi/chi/v5"
 )
 
-type Reader interface {
-	ReadEvents() (*storage.InMemory, error)
+// URLStore описывает методы для сохранения и получения URL.
+type URLStore interface {
+	Save(shortURL, originalURL string) error
+	Get(shortURL string) (string, error)
 }
 
-func NewRedirectToOriginalURL(read Reader) http.HandlerFunc {
+func NewRedirectToOriginalURL(read URLStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		RedirectToOriginalURL(w, r, read)
 	}
 }
-func RedirectToOriginalURL(w http.ResponseWriter, r *http.Request, read Reader) {
-	data, _ := read.ReadEvents()
-
-	// получаем короткий идентификатор из URL
-	shortID := chi.URLParam(r, "id")
-
-	for _, value := range data.Data() {
-		if value.ShortURL == shortID {
-			http.Redirect(w, r, value.OriginalURL, http.StatusTemporaryRedirect)
-			return // Завершаем выполнение, если найдено соответствие
-		}
+func RedirectToOriginalURL(w http.ResponseWriter, r *http.Request, read URLStore) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Unresolved method", http.StatusBadRequest)
+		return
 	}
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		http.Error(w, "Empty path or not found", http.StatusBadRequest)
+		return
+	}
+	originalURL, err := read.Get(id)
+	if err != nil || originalURL == "" {
+		http.Error(w, "URL not found", http.StatusBadRequest)
+		return
+	}
+	http.Redirect(w, r, originalURL, http.StatusTemporaryRedirect)
 
-	http.Error(w, "URL not found", http.StatusBadRequest)
 }
