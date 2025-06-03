@@ -35,14 +35,14 @@ type shortenResponse struct {
 	Result string `json:"result"`
 }
 
-func NewHandleShortenURL(cfg *config.Config, write URLStoreWithDBforHandler) http.HandlerFunc {
+func NewHandleShortenURLv13(cfg *config.Config, write URLStoreWithDBforHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		HandleShortenURL(w, r, cfg, write, sugar)
+		HandleShortenURLv13(w, r, cfg, write, sugar)
 	}
 }
 
 // HandleShortenURL обрабатывает POST-запрос на сокращение URL
-func HandleShortenURL(w http.ResponseWriter, r *http.Request, cfg *config.Config, store URLStoreWithDBforHandler, logger *zap.SugaredLogger) {
+func HandleShortenURLv13(w http.ResponseWriter, r *http.Request, cfg *config.Config, store URLStoreWithDBforHandler, logger *zap.SugaredLogger) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Ошибка чтения тела запроса", http.StatusBadRequest)
@@ -92,4 +92,41 @@ type shortenURL struct {
 
 type redirectURL struct {
 	Result string `json:"result"`
+}
+
+func NewHandleShortenURLv7(cfg *config.Config, write URLStoreWithDB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		HandleShortenURLv7(w, r, cfg, write, sugar)
+	}
+}
+
+func HandleShortenURLv7(w http.ResponseWriter, r *http.Request, cfg *config.Config, store URLStoreWithDB, logger *zap.SugaredLogger) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Ошибка чтения тела запроса", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	var req shortenRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		http.Error(w, "Ошибка парсинга JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Просто создаём новый короткий URL без проверок дубликатов
+	shortURL := generaterandomid.GenerateRandomID()
+
+	if err := store.Save(shortURL, req.URL); err != nil {
+		logger.Errorf("Ошибка сохранения: %v", err)
+		http.Error(w, "Ошибка сохранения", http.StatusInternalServerError)
+		return
+	}
+
+	resp := shortenResponse{
+		Result: cfg.BaseURL + "/" + shortURL,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(resp)
 }

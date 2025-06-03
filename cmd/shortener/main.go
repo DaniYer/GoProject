@@ -88,8 +88,8 @@ func main() {
 
 	router.Post("/", shortener.NewGenerateShortURLHandler(cfg, store))
 	router.Get("/{id}", redirect.NewRedirectToOriginalURL(store))
-	// router.Post("/api/shorten", shortener.NewHandleShortenURL(cfg, store))
-	router.Post("/api/shorten", shortener.NewHandleShortenURL(cfg, storeWithDB))
+	router.Post("/api/shorten", shortener.NewHandleShortenURLv7(cfg, store))
+	router.Post("/api/shorten_v13", shortener.NewHandleShortenURLv13(cfg, storeWithDB))
 	router.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
 		ping.PingDB(db, w)
 	})

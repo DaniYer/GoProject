@@ -66,7 +66,7 @@ func TestHandleShortenURL_Success(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/shorten", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 
-	HandleShortenURL(rec, req, cfg, mockStore, sugar)
+	HandleShortenURLv13(rec, req, cfg, mockStore, sugar)
 
 	res := rec.Result()
 	defer res.Body.Close()
@@ -95,7 +95,7 @@ func TestHandleShortenURL_Conflict(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/shorten", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 
-	HandleShortenURL(rec, req, cfg, mockStore, sugar)
+	HandleShortenURLv13(rec, req, cfg, mockStore, sugar)
 
 	res := rec.Result()
 	defer res.Body.Close()
@@ -119,7 +119,7 @@ func TestHandleShortenURL_InvalidJSON(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/shorten", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 
-	HandleShortenURL(rec, req, cfg, mockStore, sugar)
+	HandleShortenURLv13(rec, req, cfg, mockStore, sugar)
 
 	res := rec.Result()
 	defer res.Body.Close()
@@ -145,7 +145,7 @@ func TestHandleShortenURL_SaveError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/shorten", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 
-	HandleShortenURL(rec, req, cfg, mockStore, sugar)
+	HandleShortenURLv13(rec, req, cfg, mockStore, sugar)
 
 	res := rec.Result()
 	defer res.Body.Close()
