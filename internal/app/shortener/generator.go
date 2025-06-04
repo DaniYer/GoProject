@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/DaniYer/GoProject.git/internal/app/randomid"
 	"github.com/DaniYer/GoProject.git/internal/app/service"
 )
 
@@ -23,21 +24,24 @@ func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, svc *servic
 
 	originalURL := string(body)
 
-	shortID, isConflict, err := svc.Shorten(originalURL)
-	if err != nil {
-		http.Error(w, "Ошибка сохранения", http.StatusInternalServerError)
-		return
-	}
-
-	resultURL := svc.BaseURL + "/" + shortID
-
-	if isConflict {
+	existingShortURL, err := svc.Store.GetByOriginalURL(originalURL)
+	if err == nil {
+		resultURL := svc.BaseURL + "/" + existingShortURL
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusConflict)
 		w.Write([]byte(resultURL))
 		return
 	}
 
+	shortID := randomid.GenerateRandomID()
+
+	shortID, err = svc.Store.Save(shortID, originalURL)
+	if err != nil {
+		http.Error(w, "Ошибка сохранения", http.StatusInternalServerError)
+		return
+	}
+
+	resultURL := svc.BaseURL + "/" + shortID
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(resultURL))
