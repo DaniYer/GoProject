@@ -23,8 +23,12 @@ func (m *MockStore) Get(shortURL string) (string, error) {
 	return "", nil
 }
 
-func (m *MockStore) Save(shortURL, originalURL string) error {
-	return nil // не используется в этом тесте
+func (m *MockStore) Save(shortURL, originalURL string) (string, error) {
+	return shortURL, nil // обновленная сигнатура под новую архитектуру
+}
+
+func (m *MockStore) GetByOriginalURL(originalURL string) (string, error) {
+	return "", nil // не используется в redirect тестах
 }
 
 func TestRedirectToOriginalURL_Success(t *testing.T) {
@@ -40,7 +44,6 @@ func TestRedirectToOriginalURL_Success(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/abcd1234", nil)
 	rec := httptest.NewRecorder()
 
-	// корректно вставляем chi.RouteContext в request context
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", "abcd1234")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))

@@ -4,36 +4,23 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/DaniYer/GoProject.git/internal/app/randomid"
+	"github.com/DaniYer/GoProject.git/internal/app/dto"
+	"github.com/DaniYer/GoProject.git/internal/app/service"
 )
 
-type URLStore interface {
-	Save(shortURL, originalURL string) error
-	Get(shortURL string) (string, error)
-}
-
-type BatchRequest struct {
-	CorrelationID string `json:"correlation_id"`
-	OriginalURL   string `json:"original_url"`
-}
-
-type BatchResponse struct {
-	CorrelationID string `json:"correlation_id"`
-	ShortURL      string `json:"short_url"`
-}
-
-func NewBatchShortenURLHandler(baseURL string, store URLStore) http.HandlerFunc {
+func NewBatchShortenURLHandler(svc *service.URLService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		batchShortenHandler(w, r, baseURL, store)
+		batchShortenHandler(w, r, svc)
 	}
 }
-func batchShortenHandler(w http.ResponseWriter, r *http.Request, baseURL string, store URLStore) {
+
+func batchShortenHandler(w http.ResponseWriter, r *http.Request, svc *service.URLService) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	var requests []BatchRequest
+	var requests []dto.BatchRequest
 	if err := json.NewDecoder(r.Body).Decode(&requests); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
@@ -44,18 +31,10 @@ func batchShortenHandler(w http.ResponseWriter, r *http.Request, baseURL string,
 		return
 	}
 
-	responses := make([]BatchResponse, len(requests))
-
-	for i, req := range requests {
-		shortURL := randomid.GenerateRandomID()
-		if err := store.Save(shortURL, req.OriginalURL); err != nil {
-			http.Error(w, "Error saving URL", http.StatusInternalServerError)
-			return
-		}
-		responses[i] = BatchResponse{
-			CorrelationID: req.CorrelationID,
-			ShortURL:      baseURL + "/" + shortURL,
-		}
+	responses, err := svc.ShortenBatch(requests)
+	if err != nil {
+		http.Error(w, "Error saving URL", http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")

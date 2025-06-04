@@ -5,26 +5,17 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/DaniYer/GoProject.git/internal/app/config"
-	generaterandomid "github.com/DaniYer/GoProject.git/internal/app/randomid"
-	"go.uber.org/zap"
+	"github.com/DaniYer/GoProject.git/internal/app/dto"
+	"github.com/DaniYer/GoProject.git/internal/app/service"
 )
 
-type shortenRequest struct {
-	URL string `json:"url"`
-}
-
-type shortenResponse struct {
-	Result string `json:"result"`
-}
-
-func NewHandleShortenURLv13(cfg *config.Config, store URLStoreWithDBforHandler, logger *zap.SugaredLogger) http.HandlerFunc {
+func NewHandleShortenURLv13(svc *service.URLService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		HandleShortenURLv13(w, r, cfg, store, logger)
+		HandleShortenURLv13(w, r, svc)
 	}
 }
 
-func HandleShortenURLv13(w http.ResponseWriter, r *http.Request, cfg *config.Config, store URLStoreWithDBforHandler, logger *zap.SugaredLogger) {
+func HandleShortenURLv13(w http.ResponseWriter, r *http.Request, svc *service.URLService) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Ошибка чтения тела", http.StatusBadRequest)
@@ -32,31 +23,27 @@ func HandleShortenURLv13(w http.ResponseWriter, r *http.Request, cfg *config.Con
 	}
 	defer r.Body.Close()
 
-	var req shortenRequest
+	var req dto.ShortenRequest
 	if err := json.Unmarshal(body, &req); err != nil {
 		http.Error(w, "Ошибка парсинга JSON", http.StatusBadRequest)
 		return
 	}
 
-	existingShortURL, err := store.GetByOriginalURL(req.URL)
-	if err == nil {
-		resp := shortenResponse{Result: cfg.BaseURL + "/" + existingShortURL}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(resp)
-		return
-	}
-
-	shortID := generaterandomid.GenerateRandomID()
-
-	if err := store.Save(shortID, req.URL); err != nil {
-		logger.Errorf("Ошибка сохранения: %v", err)
+	shortID, isConflict, err := svc.ShortenJSON(req.URL)
+	if err != nil {
 		http.Error(w, "Ошибка сохранения", http.StatusInternalServerError)
 		return
 	}
 
-	resp := shortenResponse{Result: cfg.BaseURL + "/" + shortID}
+	resp := dto.ShortenResponse{Result: svc.BaseURL + "/" + shortID}
+
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
+
+	if isConflict {
+		w.WriteHeader(http.StatusConflict)
+	} else {
+		w.WriteHeader(http.StatusCreated)
+	}
+
 	json.NewEncoder(w).Encode(resp)
 }

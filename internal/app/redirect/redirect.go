@@ -8,7 +8,7 @@ import (
 
 // URLStore описывает методы для сохранения и получения URL.
 type URLStore interface {
-	Save(shortURL, originalURL string) error
+	Save(shortURL, originalURL string) (string, error)
 	Get(shortURL string) (string, error)
 }
 

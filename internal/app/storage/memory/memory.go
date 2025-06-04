@@ -16,11 +16,11 @@ func NewMemoryStore() *MemoryStore {
 	}
 }
 
-func (m *MemoryStore) Save(shortURL, originalURL string) error {
+func (m *MemoryStore) Save(shortURL, originalURL string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.data[shortURL] = originalURL
-	return nil
+	return shortURL, nil
 }
 
 func (m *MemoryStore) Get(shortURL string) (string, error) {
