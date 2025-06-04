@@ -40,9 +40,6 @@ func InitializeApp() error {
 		store service.URLStore
 	)
 
-	if err != nil {
-		sugar.Fatalf("Ошибка применения миграций: %v", err)
-	}
 	if cfg.DatabaseDSN != "" && cfg.DatabaseDSN != config.DefaultDatabaseDSN {
 		db, err = database.InitDB("pgx", cfg.DatabaseDSN)
 		if err != nil {
