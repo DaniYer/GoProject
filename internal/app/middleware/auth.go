@@ -11,12 +11,19 @@ import (
 
 func AuthMiddleware(next http.HandlerFunc, secret string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID, err := utils.ValidateCookie(r, secret)
-		if err != nil {
-			// куки нет или подпись неверна — генерируем новую
+		var userID string
+
+		if _, err := r.Cookie(utils.CookieName); err != nil {
 			userID = generateNewUserID()
 			newCookie := utils.GenerateSignedCookie(userID, secret)
 			http.SetCookie(w, newCookie)
+		} else {
+			userID, err = utils.ValidateCookie(r, secret)
+			if err != nil {
+				userID = generateNewUserID()
+				newCookie := utils.GenerateSignedCookie(userID, secret)
+				http.SetCookie(w, newCookie)
+			}
 		}
 
 		ctx := utils.WithUserID(r.Context(), userID)
