@@ -3,43 +3,48 @@ package shortener
 import (
 	"io"
 	"net/http"
-	"net/url"
 
-	"github.com/DaniYer/GoProject.git/internal/app/config"
-	generaterandomid "github.com/DaniYer/GoProject.git/internal/app/randomid"
-	"github.com/DaniYer/GoProject.git/internal/app/storage"
-	"github.com/google/uuid"
+	"github.com/DaniYer/GoProject.git/internal/app/randomid"
+	"github.com/DaniYer/GoProject.git/internal/app/service"
 )
 
-func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, cfg *config.Config, write Storage) {
-	shortID := generaterandomid.GenerateRandomID()
+func NewGenerateShortURLHandler(svc *service.URLService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		GenerateShortURLHandler(w, r, svc)
+	}
+}
 
-	// читаем тело запроса
+func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, svc *service.URLService) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		http.Error(w, "Ошибка чтения тела", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	originalURL := string(body)
+
+	existingShortURL, err := svc.Store.GetByOriginalURL(originalURL)
+	if err == nil {
+		resultURL := svc.BaseURL + "/" + existingShortURL
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusConflict)
+		w.Write([]byte(resultURL))
 		return
 	}
 
-	if _, err = url.Parse(string(body)); err != nil {
-		http.Error(w, "Invalid URL format", http.StatusBadRequest)
+	shortID := randomid.GenerateRandomID()
+
+	shortID, err = svc.Store.Save(shortID, originalURL)
+	if err != nil {
+		http.Error(w, "Ошибка сохранения", http.StatusInternalServerError)
 		return
 	}
 
-	eventID := uuid.New().String()
-
-	event := storage.Event{
-		UUID:        eventID,
-		ShortURL:    shortID,
-		OriginalURL: string(body),
-	}
-
-	// Записываем событие, проверяем ошибку записи
-	if err := write.WriteEvent(&event); err != nil {
-		http.Error(w, "Failed to write event", http.StatusInternalServerError)
-		return
-	}
+	resultURL := svc.BaseURL + "/" + shortID
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(cfg.B + "/" + shortID))
+	w.Write([]byte(resultURL))
 }
+
+// GenerateShortURLHandler обрабатывает запросы на генерацию коротких URL
