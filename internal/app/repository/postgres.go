@@ -16,12 +16,8 @@ type PostgresStorage struct {
 	db *pgx.Conn
 }
 
-func (p *PostgresStorage) Ping(ctx context.Context) error {
-	return p.db.Ping(ctx)
-}
+var ErrDuplicateURL = errors.New("duplicate url")
 
-// NewPostgres initializes a new PostgresStorage instance with a connection to the database.
-// It takes a Data Source Name (DSN) as an argument and returns a pointer to PostgresStorage or an error.
 func NewPostgres(dsn string) (*PostgresStorage, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -33,13 +29,27 @@ func NewPostgres(dsn string) (*PostgresStorage, error) {
 	return &PostgresStorage{db: conn}, nil
 }
 
+func (p *PostgresStorage) Ping(ctx context.Context) error {
+	return p.db.Ping(ctx)
+}
+
 func (p *PostgresStorage) Close(ctx context.Context) {
 	_ = p.db.Close(ctx)
 }
 
-// SaveURL saves a new URL for a user in the database.
-// It generates a unique short ID, inserts the original URL and user ID into the database,
-// and returns the short ID. If a URL with the same original URL already exists, it retrieves the existing short ID.
+func (p *PostgresStorage) InitSchema(ctx context.Context) error {
+	query := `
+	CREATE TABLE IF NOT EXISTS urls (
+		id SERIAL PRIMARY KEY,
+		short_url TEXT NOT NULL UNIQUE,
+		original_url TEXT NOT NULL UNIQUE,
+		user_id TEXT NOT NULL,
+		is_deleted BOOLEAN DEFAULT FALSE
+	)`
+	_, err := p.db.Exec(ctx, query)
+	return err
+}
+
 func (p *PostgresStorage) SaveURL(ctx context.Context, userID, originalURL string) (string, error) {
 	shortID := uuid.New().String()[:8]
 
@@ -51,10 +61,8 @@ func (p *PostgresStorage) SaveURL(ctx context.Context, userID, originalURL strin
 		return shortID, nil
 	}
 
-	// Вот здесь блок по ловле дубликатов:
 	if pgerr, ok := err.(*pgconn.PgError); ok {
 		if pgerr.Code == pgerrcode.UniqueViolation {
-			// Достаём уже существующий short_url
 			var existingShortID string
 			query := `SELECT short_url FROM urls WHERE original_url = $1 LIMIT 1`
 			err2 := p.db.QueryRow(ctx, query, originalURL).Scan(&existingShortID)
@@ -102,8 +110,6 @@ func (p *PostgresStorage) GetUserURLs(ctx context.Context, userID string) ([]dto
 	return result, nil
 }
 
-// SaveBatchURLs saves a batch of URLs for a user and returns the corresponding short URLs.
-// It generates a unique short ID for each URL and inserts them into the database within a transaction.
 func (p *PostgresStorage) SaveBatchURLs(ctx context.Context, userID string, batch []dto.BatchRequestItem, baseURL string) ([]dto.BatchResponseItem, error) {
 	tx, err := p.db.Begin(ctx)
 	if err != nil {
@@ -122,14 +128,12 @@ func (p *PostgresStorage) SaveBatchURLs(ctx context.Context, userID string, batc
 		if err != nil {
 			if pgerr, ok := err.(*pgconn.PgError); ok {
 				if pgerr.Code == pgerrcode.UniqueViolation {
-					// достаем уже существующий short_url
 					var existingShortID string
 					query := `SELECT short_url FROM urls WHERE original_url = $1 LIMIT 1`
 					err2 := tx.QueryRow(ctx, query, item.OriginalURL).Scan(&existingShortID)
 					if err2 != nil {
 						return nil, err2
 					}
-
 					result = append(result, dto.BatchResponseItem{
 						CorrelationID: item.CorrelationID,
 						ShortURL:      baseURL + "/" + existingShortID,
@@ -151,17 +155,4 @@ func (p *PostgresStorage) SaveBatchURLs(ctx context.Context, userID string, batc
 	}
 
 	return result, nil
-}
-
-func (p *PostgresStorage) InitSchema(ctx context.Context) error {
-	query := `
-	CREATE TABLE IF NOT EXISTS urls (
-		id SERIAL PRIMARY KEY,
-		short_url TEXT NOT NULL UNIQUE,
-		original_url TEXT NOT NULL UNIQUE,
-		user_id TEXT NOT NULL,
-		is_deleted BOOLEAN DEFAULT FALSE
-	)`
-	_, err := p.db.Exec(ctx, query)
-	return err
 }
