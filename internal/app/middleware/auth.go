@@ -24,7 +24,10 @@ func AuthMiddleware(next http.HandlerFunc, secret string) http.Handler {
 	})
 }
 
+// generateNewUserID создает новый уникальный идентификатор пользователя
+// Использует текущее время в наносекундах и случайное число для обеспечения уникальности
+// Это простой способ, но в реальных приложениях лучше использовать UUID или другие методы генерации уникальных идентификаторов
+// Для тестов можно использовать mock-функцию
 func generateNewUserID() string {
-	rand.Seed(time.Now().UnixNano())
 	return strconv.FormatInt(time.Now().UnixNano(), 10) + strconv.Itoa(rand.Intn(1000))
 }
