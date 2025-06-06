@@ -2,57 +2,47 @@ package config
 
 import (
 	"flag"
-	"fmt"
-	"os"
+	"log"
+	"time"
 
 	"github.com/caarlos0/env/v6"
 )
 
-const (
-	DefaultFileStoragePath = "storage.json"
-	DefaultServerAddress   = "localhost:8080"
-	DefaultBaseURL         = "http://localhost:8080"
-	DefaultDatabaseDSN     = "localDB"
-)
-
 type Config struct {
-	ServerAddress   string `env:"SERVER_ADDRESS" envDefault:"localhost:8080"`
-	BaseURL         string `env:"BASE_URL" envDefault:"http://localhost:8080"`
-	FileStoragePath string
-	DatabaseDSN     string `env:"DATABASE_DSN" envDefault:"localDB"`
+	ServerAddress   string        `env:"SERVER_ADDRESS"`
+	BaseURL         string        `env:"BASE_URL"`
+	DatabaseDSN     string        `env:"DATABASE_DSN"`
+	FileStoragePath string        `env:"FILE_STORAGE_PATH"`
+	SecretKey       string        `env:"SECRET_KEY" envDefault:"supersecretkey"`
+	ReadTimeout     time.Duration `env:"READ_TIMEOUT" envDefault:"5s"`
+	WriteTimeout    time.Duration `env:"WRITE_TIMEOUT" envDefault:"5s"`
 }
 
-func NewConfig() *Config {
+func Load() *Config {
 	cfg := &Config{}
 
-	// Сначала парсим переменные окружения через caarlos0/env
-	if err := env.Parse(cfg); err != nil {
-		fmt.Println("Ошибка парсинга переменных окружения:", err)
-	}
-
-	// Парсим флаги
-	fileStoragePathFlag := flag.String("f", DefaultFileStoragePath, "Путь к файлу хранения данных")
-	serverAddressFlag := flag.String("a", DefaultServerAddress, "Адрес сервера (например, localhost:8080)")
-	baseURLFlag := flag.String("b", DefaultBaseURL, "Базовый URL для сокращённых ссылок")
-	dsnFlag := flag.String("d", DefaultDatabaseDSN, "Строка подключения к базе данных")
+	// Сначала читаем флаги:
+	flag.StringVar(&cfg.ServerAddress, "a", "", "HTTP server address")
+	flag.StringVar(&cfg.BaseURL, "b", "", "Base URL address")
+	flag.StringVar(&cfg.FileStoragePath, "f", "", "File storage path")
+	flag.StringVar(&cfg.DatabaseDSN, "d", "", "Database DSN")
 	flag.Parse()
 
-	// Определяем итоговые значения по приоритету: env → flags → default
-	cfg.FileStoragePath = getConfigValue(os.Getenv("FILE_STORAGE_PATH"), *fileStoragePathFlag, DefaultFileStoragePath)
-	cfg.ServerAddress = getConfigValue(os.Getenv("SERVER_ADDRESS"), *serverAddressFlag, DefaultServerAddress)
-	cfg.BaseURL = getConfigValue(os.Getenv("BASE_URL"), *baseURLFlag, DefaultBaseURL)
-	cfg.DatabaseDSN = getConfigValue(os.Getenv("DATABASE_DSN"), *dsnFlag, DefaultDatabaseDSN)
+	// Затем читаем ENV — перезапишет флаги если они есть
+	if err := env.Parse(cfg); err != nil {
+		log.Fatalf("Failed to parse env: %v", err)
+	}
+
+	// Дефолты:
+	if cfg.ServerAddress == "" {
+		cfg.ServerAddress = ":8080"
+	}
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = "http://localhost:8080"
+	}
+	if cfg.FileStoragePath == "" {
+		cfg.FileStoragePath = "storage.json"
+	}
 
 	return cfg
-}
-
-// Хелпер для выбора значения по приоритету
-func getConfigValue(envValue, flagValue, defaultValue string) string {
-	if envValue != "" {
-		return envValue
-	}
-	if flagValue != "" {
-		return flagValue
-	}
-	return defaultValue
 }
