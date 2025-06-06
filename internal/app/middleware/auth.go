@@ -13,10 +13,10 @@ func AuthMiddleware(next http.HandlerFunc, secret string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID, err := utils.ValidateCookie(r, secret)
 		if err != nil {
-			// Генерация новой куки, если невалидна
+			// куки нет или подпись неверна — генерируем новую
 			userID = generateNewUserID()
-			cookie := utils.GenerateSignedCookie(userID, secret)
-			http.SetCookie(w, cookie)
+			newCookie := utils.GenerateSignedCookie(userID, secret)
+			http.SetCookie(w, newCookie)
 		}
 
 		ctx := utils.WithUserID(r.Context(), userID)
