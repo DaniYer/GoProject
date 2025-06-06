@@ -1,3 +1,5 @@
+// Пакет shortener содержит обработчики для сокращения URL
+// Он использует сервис URLService для обработки запросов
 package shortener
 
 import (

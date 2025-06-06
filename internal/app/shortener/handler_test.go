@@ -1,3 +1,5 @@
+// пакет shortener предназначен для тестирования обработчиков URL-адресов
+// Он использует InMemoryMockStore для имитации хранилища URL-адресов
 package shortener
 
 import (
