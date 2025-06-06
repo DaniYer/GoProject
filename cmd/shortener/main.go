@@ -32,9 +32,12 @@ func main() {
 			logger.Log.Fatalf("cannot connect to database: %v", err)
 		}
 		defer pg.Close(context.Background())
+
+		// <-- вот здесь создаём схему
 		if err := pg.InitSchema(context.Background()); err != nil {
 			logger.Log.Fatalf("cannot init schema: %v", err)
 		}
+
 		repo = pg
 		pingFunc = pg.Ping
 		logger.Log.Infof("Using Postgres storage")
