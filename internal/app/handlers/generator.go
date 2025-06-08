@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"io"
 	"net/http"
 
@@ -28,12 +27,12 @@ func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, svc *servic
 	originalURL := string(body)
 
 	existingShortURL, err := svc.Store.GetByOriginalURL(originalURL)
-	resp := map[string]string{"result": svc.BaseURL + "/" + existingShortURL}
+	resultURL := svc.BaseURL + "/" + existingShortURL
 
-	w.Header().Set("Content-Type", "application/json")
 	if err == nil {
 		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(resp)
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte(resultURL))
 		return
 	}
 
@@ -44,7 +43,8 @@ func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, svc *servic
 		return
 	}
 
-	resp = map[string]string{"result": svc.BaseURL + "/" + shortID}
+	resultURL = svc.BaseURL + "/" + shortID
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(resp)
+	w.Header().Set("Content-Type", "text/plain")
+	w.Write([]byte(resultURL))
 }
