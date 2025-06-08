@@ -82,12 +82,13 @@ func InitializeApp() error {
 	// Роуты
 	router.Post("/", handlers.NewGenerateShortURLHandler(&urlService))
 	router.Post("/api/shorten/batch", handlers.NewBatchShortenURLHandler(&urlService))
-	// router.Get("/{id}", handlers.NewRedirectToOriginalURL(store))
 	router.Get("/{id}", handlers.NewRedirectToOriginalURL(&urlService))
 
 	router.Get("/ping", handlers.PingDBInit(db))
 	router.Post("/api/shorten", handlers.NewHandleShortenURLv13(&urlService))
 	router.Get("/api/user/urls", handlers.GetUserURLsHandler(&urlService))
+
+	router.Delete("/api/user/urls", handlers.NewBatchDeleteHandler(&urlService))
 
 	if err := http.ListenAndServe(cfg.ServerAddress, router); err != nil {
 		sugar.Errorf("Ошибка сервера: %v", err)
