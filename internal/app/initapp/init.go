@@ -12,6 +12,7 @@ import (
 	"github.com/DaniYer/GoProject.git/internal/app/storage/database"
 	"github.com/DaniYer/GoProject.git/internal/app/storage/file"
 	"github.com/DaniYer/GoProject.git/internal/app/storage/memory"
+	"github.com/DaniYer/GoProject.git/internal/app/worker"
 	"github.com/go-chi/chi/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose"
@@ -66,6 +67,10 @@ func InitializeApp() error {
 		BaseURL: cfg.BaseURL,
 	}
 
+	// создаем worker
+	deleteWorker := worker.NewDeleteWorker(urlService.Store, 100)
+	deleteWorker.Start()
+
 	router := chi.NewRouter()
 
 	sugar.Infow("Запуск сервера", "адрес", cfg.ServerAddress)
@@ -74,13 +79,18 @@ func InitializeApp() error {
 	router.Use(middlewares.GzipHandle)
 	router.Use(middlewares.AuthMiddleware)
 
+	// Роуты
 	router.Post("/", handlers.NewGenerateShortURLHandler(&urlService))
 	router.Post("/api/shorten/batch", handlers.NewBatchShortenURLHandler(&urlService))
 	router.Get("/{id}", handlers.NewRedirectToOriginalURL(&urlService))
+
 	router.Get("/ping", handlers.PingDBInit(db))
 	router.Post("/api/shorten", handlers.NewHandleShortenURLv13(&urlService))
 	router.Get("/api/user/urls", handlers.GetUserURLsHandler(&urlService))
-	router.Delete("/api/user/urls", handlers.NewBatchDeleteHandler(&urlService))
+	router.Delete("/api/user/urls", handlers.NewBatchDeleteHandler(handlers.BatchDeleteDeps{
+		Service: &urlService,
+		Worker:  deleteWorker,
+	}))
 
 	if err := http.ListenAndServe(cfg.ServerAddress, router); err != nil {
 		sugar.Errorf("Ошибка сервера: %v", err)

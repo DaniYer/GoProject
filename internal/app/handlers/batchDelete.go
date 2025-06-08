@@ -7,9 +7,15 @@ import (
 	"github.com/DaniYer/GoProject.git/internal/app/dto"
 	"github.com/DaniYer/GoProject.git/internal/app/middlewares"
 	"github.com/DaniYer/GoProject.git/internal/app/service"
+	"github.com/DaniYer/GoProject.git/internal/app/worker"
 )
 
-func NewBatchDeleteHandler(svc *service.URLService) http.HandlerFunc {
+type BatchDeleteDeps struct {
+	Service *service.URLService
+	Worker  *worker.DeleteWorker
+}
+
+func NewBatchDeleteHandler(deps BatchDeleteDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Context().Value(middlewares.UserIDKey).(string)
 
@@ -19,10 +25,8 @@ func NewBatchDeleteHandler(svc *service.URLService) http.HandlerFunc {
 			return
 		}
 
-		if err := svc.BatchDelete(userID, req); err != nil {
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
+		// Передаем в воркер
+		deps.Worker.Queue <- worker.DeleteTask{UserID: userID, ShortURLs: req}
 
 		w.WriteHeader(http.StatusAccepted)
 	}
