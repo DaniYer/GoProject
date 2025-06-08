@@ -8,7 +8,6 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
-	"time"
 )
 
 type contextKey string
@@ -87,7 +86,6 @@ func sign(userID string) string {
 }
 
 func generateUserID() string {
-	rand.Seed(time.Now().UnixNano())
 	b := make([]byte, 16)
 	for i := range b {
 		b[i] = "abcdefghijklmnopqrstuvwxyz0123456789"[rand.Intn(36)]
