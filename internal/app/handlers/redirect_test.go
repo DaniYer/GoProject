@@ -35,6 +35,10 @@ func (m *MockRedirectStore) GetAllByUser(userID string) ([]dto.UserURL, error) {
 	return nil, nil
 }
 
+func (m *MockRedirectStore) BatchDelete(userID string, shortURLs []string) error {
+	return nil
+}
+
 func TestRedirectToOriginalURL_Success(t *testing.T) {
 	mockStore := &MockRedirectStore{
 		GetFunc: func(shortURL string) (string, error) {

@@ -60,6 +60,10 @@ func (m *InMemoryMockStore) GetAllByUser(userID string) ([]dto.UserURL, error) {
 	return nil, nil
 }
 
+func (m *InMemoryMockStore) BatchDelete(userID string, shortURLs []string) error {
+	return nil
+}
+
 func buildTestRouter(svc *service.URLService) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middlewares.GzipHandle)
@@ -81,7 +85,7 @@ func TestHandleShortenURLv13_Success(t *testing.T) {
 	body, _ := json.Marshal(reqData)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/shorten", bytes.NewBuffer(body))
-	req.Header.Set("Accept-Encoding", "gzip") // ⚠ обязательно ставим gzip-заголовок
+	req.Header.Set("Accept-Encoding", "gzip")
 	rec := httptest.NewRecorder()
 
 	router.ServeHTTP(rec, req)
