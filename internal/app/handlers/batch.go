@@ -19,20 +19,19 @@ func NewBatchShortenURLHandler(svc *service.URLService) http.HandlerFunc {
 			return
 		}
 
-		responses := make([]dto.BatchResponse, 0, len(req))
-		for _, item := range req {
-			shortID, _, err := svc.Shorten(item.OriginalURL, userID)
-			if err != nil {
-				http.Error(w, "internal error", http.StatusInternalServerError)
-				return
-			}
-			responses = append(responses, dto.BatchResponse{
-				CorrelationID: item.CorrelationID,
-				ShortURL:      svc.BaseURL + "/" + shortID,
-			})
+		if len(req) == 0 {
+			http.Error(w, "empty batch", http.StatusBadRequest)
+			return
+		}
+
+		res, err := svc.ShortenBatch(req, userID)
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(responses)
+		w.WriteHeader(http.StatusCreated) // <-- вот это важно
+		json.NewEncoder(w).Encode(res)
 	}
 }
