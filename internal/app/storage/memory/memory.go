@@ -64,12 +64,15 @@ func (m *MemoryStore) GetByOriginalURL(originalURL string) (string, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	for short, record := range m.data {
-		if record.OriginalURL == originalURL && !record.Deleted {
-			return short, nil
-		}
+	shortURL, ok := m.originalIdx[originalURL]
+	if !ok {
+		return "", errors.New("not found")
 	}
-	return "", errors.New("not found")
+	record := m.data[shortURL]
+	if record.Deleted {
+		return "", errors.New("not found")
+	}
+	return shortURL, nil
 }
 
 func (m *MemoryStore) GetAllByUser(userID string) ([]dto.UserURL, error) {
