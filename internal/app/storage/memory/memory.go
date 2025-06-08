@@ -15,8 +15,8 @@ type StoredURL struct {
 
 type MemoryStore struct {
 	mu          sync.RWMutex
-	data        map[string]StoredURL // shortURL → StoredURL
-	originalIdx map[string]string    // originalURL → shortURL
+	data        map[string]StoredURL
+	originalIdx map[string]string
 }
 
 func NewMemoryStore() *MemoryStore {

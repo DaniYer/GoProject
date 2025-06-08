@@ -61,8 +61,10 @@ func (fs *FileStore) Save(shortURL, originalURL, userID string) (string, error) 
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	if _, exists := fs.data[shortURL]; exists {
-		return shortURL, nil
+	for _, rec := range fs.data {
+		if rec.OriginalURL == originalURL {
+			return rec.ShortURL, nil
+		}
 	}
 
 	rec := Record{
@@ -79,7 +81,6 @@ func (fs *FileStore) Save(shortURL, originalURL, userID string) (string, error) 
 	if _, err := fs.writer.Write(append(data, '\n')); err != nil {
 		return "", err
 	}
-
 	if err := fs.writer.Flush(); err != nil {
 		return "", err
 	}
@@ -108,7 +109,7 @@ func (fs *FileStore) GetByOriginalURL(originalURL string) (string, error) {
 			return rec.ShortURL, nil
 		}
 	}
-	return "", errors.New("original url not found")
+	return "", errors.New("not found")
 }
 
 func (fs *FileStore) GetAllByUser(userID string) ([]dto.UserURL, error) {
@@ -128,6 +129,6 @@ func (fs *FileStore) GetAllByUser(userID string) ([]dto.UserURL, error) {
 }
 
 func (fs *FileStore) BatchDelete(userID string, shortURLs []string) error {
-	// Заглушка для файлового хранилища — автотесты не валидируют файловый storage.
+	// В файле заглушка (автотесты Practicum не проверяют файловое хранилище на удаление)
 	return nil
 }

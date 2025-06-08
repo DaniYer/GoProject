@@ -25,7 +25,7 @@ func InitializeApp() error {
 
 	logger, err := zap.NewDevelopment()
 	if err != nil {
-		return fmt.Errorf("init logger err: %w", err)
+		return fmt.Errorf("init logger error: %w", err)
 	}
 	defer logger.Sync()
 	sugar := logger.Sugar()
@@ -36,14 +36,14 @@ func InitializeApp() error {
 		store service.URLStore
 	)
 
-	if cfg.DatabaseDSN != "" {
+	if cfg.DatabaseDSN != "" && cfg.DatabaseDSN != config.DefaultDatabaseDSN {
 		db, err = database.InitDB("pgx", cfg.DatabaseDSN)
 		if err != nil {
 			sugar.Errorf("DB connect error: %v", err)
 			return err
 		}
 		if err := goose.Up(db, "internal/app/storage/database/migrations"); err != nil {
-			sugar.Errorf("Migrations error: %v", err)
+			sugar.Errorf("Migration error: %v", err)
 			return err
 		}
 		store = database.NewDBStore(db)
@@ -52,26 +52,22 @@ func InitializeApp() error {
 	if store == nil && cfg.FileStoragePath != "" {
 		fs, err := file.NewFileStore(cfg.FileStoragePath)
 		if err != nil {
-			sugar.Errorf("File store error: %v", err)
+			sugar.Errorf("FileStore init error: %v", err)
 		} else {
 			store = fs
 		}
 	}
 
 	if store == nil {
-		sugar.Infof("Fallback in-memory store")
+		sugar.Infof("Using in-memory storage")
 		store = memory.NewMemoryStore()
 	}
 
-	urlService := service.URLService{
-		Store:   store,
-		BaseURL: cfg.BaseURL,
-	}
+	urlService := service.NewURLService(store, cfg.BaseURL)
 
-	// создаем worker pool
-	pool := worker.NewDeleteWorkerPool(store, 1024, 10, 2*time.Second)
-	pool.Start()
-	defer pool.Shutdown()
+	// запускаем worker pool
+	workerPool := worker.NewDeleteWorkerPool(urlService, 1024, 5*time.Second)
+	workerPool.Start()
 
 	router := chi.NewRouter()
 
@@ -81,19 +77,17 @@ func InitializeApp() error {
 	router.Use(middlewares.GzipHandle)
 	router.Use(middlewares.AuthMiddleware)
 
-	router.Post("/", handlers.NewGenerateShortURLHandler(&urlService))
-	router.Post("/api/shorten/batch", handlers.NewBatchShortenURLHandler(&urlService))
-	router.Post("/api/shorten", handlers.NewHandleShortenURLv13(&urlService))
-	router.Get("/{id}", handlers.NewRedirectToOriginalURL(&urlService))
+	router.Post("/", handlers.NewGenerateShortURLHandler(urlService))
+	router.Post("/api/shorten", handlers.NewHandleShortenURLv13(urlService))
+	router.Post("/api/shorten/batch", handlers.NewBatchShortenURLHandler(urlService))
+	router.Get("/{id}", handlers.NewRedirectToOriginalURL(urlService))
 	router.Get("/ping", handlers.PingDBInit(db))
-	router.Get("/api/user/urls", handlers.GetUserURLsHandler(&urlService))
-	router.Delete("/api/user/urls", (&handlers.DeleteHandler{
-		Svc:  &urlService,
-		Pool: pool,
-	}).ServeHTTP)
+	router.Get("/api/user/urls", handlers.GetUserURLsHandler(urlService))
+	router.Delete("/api/user/urls", handlers.NewBatchDeleteHandler(urlService, workerPool))
 
 	if err := http.ListenAndServe(cfg.ServerAddress, router); err != nil {
 		sugar.Errorf("Server error: %v", err)
 	}
+
 	return nil
 }

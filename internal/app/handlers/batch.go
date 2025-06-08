@@ -19,19 +19,14 @@ func NewBatchShortenURLHandler(svc *service.URLService) http.HandlerFunc {
 			return
 		}
 
-		if len(req) == 0 {
-			http.Error(w, "empty batch", http.StatusBadRequest)
-			return
-		}
-
-		res, err := svc.ShortenBatch(req, userID)
+		responses, err := svc.ShortenBatch(req, userID)
 		if err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated) // <-- вот это важно
-		json.NewEncoder(w).Encode(res)
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(responses)
 	}
 }

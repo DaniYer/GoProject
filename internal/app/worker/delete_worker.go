@@ -7,34 +7,32 @@ import (
 	"github.com/DaniYer/GoProject.git/internal/app/service"
 )
 
-// DeleteTask — задача на удаление
 type DeleteTask struct {
 	UserID string
 	Short  string
 }
 
 type DeleteWorkerPool struct {
-	store     service.URLStore
-	tasks     chan DeleteTask
-	wg        sync.WaitGroup
-	workerNum int
-	flushDur  time.Duration
+	service  *service.URLService
+	tasks    chan DeleteTask
+	wg       sync.WaitGroup
+	flushDur time.Duration
+	batch    map[string][]string
+	mu       sync.Mutex
 }
 
-func NewDeleteWorkerPool(store service.URLStore, bufferSize int, workerNum int, flushDur time.Duration) *DeleteWorkerPool {
+func NewDeleteWorkerPool(service *service.URLService, bufferSize int, flushDur time.Duration) *DeleteWorkerPool {
 	return &DeleteWorkerPool{
-		store:     store,
-		tasks:     make(chan DeleteTask, bufferSize),
-		workerNum: workerNum,
-		flushDur:  flushDur,
+		service:  service,
+		tasks:    make(chan DeleteTask, bufferSize),
+		flushDur: flushDur,
+		batch:    make(map[string][]string),
 	}
 }
 
 func (p *DeleteWorkerPool) Start() {
-	for i := 0; i < p.workerNum; i++ {
-		p.wg.Add(1)
-		go p.worker()
-	}
+	p.wg.Add(1)
+	go p.worker()
 }
 
 func (p *DeleteWorkerPool) AddTask(task DeleteTask) {
@@ -48,8 +46,6 @@ func (p *DeleteWorkerPool) Shutdown() {
 
 func (p *DeleteWorkerPool) worker() {
 	defer p.wg.Done()
-
-	batch := make(map[string][]string)
 	ticker := time.NewTicker(p.flushDur)
 	defer ticker.Stop()
 
@@ -57,27 +53,24 @@ func (p *DeleteWorkerPool) worker() {
 		select {
 		case task, ok := <-p.tasks:
 			if !ok {
-				p.flush(batch)
+				p.flush()
 				return
 			}
-			batch[task.UserID] = append(batch[task.UserID], task.Short)
-			if len(batch[task.UserID]) >= 100 {
-				p.flushUser(task.UserID, batch)
-			}
+			p.mu.Lock()
+			p.batch[task.UserID] = append(p.batch[task.UserID], task.Short)
+			p.mu.Unlock()
 		case <-ticker.C:
-			p.flush(batch)
+			p.flush()
 		}
 	}
 }
 
-func (p *DeleteWorkerPool) flush(batch map[string][]string) {
-	for userID, urls := range batch {
-		p.store.BatchDelete(userID, urls)
-		delete(batch, userID)
-	}
-}
+func (p *DeleteWorkerPool) flush() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-func (p *DeleteWorkerPool) flushUser(userID string, batch map[string][]string) {
-	p.store.BatchDelete(userID, batch[userID])
-	delete(batch, userID)
+	for userID, urls := range p.batch {
+		_ = p.service.Store.BatchDelete(userID, urls)
+	}
+	p.batch = make(map[string][]string)
 }

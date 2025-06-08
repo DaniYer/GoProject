@@ -19,21 +19,19 @@ func NewHandleShortenURLv13(svc *service.URLService) http.HandlerFunc {
 			return
 		}
 
-		shortID, existed, err := svc.ShortenJSON(req.URL, userID)
+		shortID, existed, err := svc.Shorten(req.URL, userID)
 		if err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 
-		status := http.StatusCreated
-		if existed {
-			status = http.StatusConflict
-		}
-
 		resp := dto.ShortenResponse{Result: svc.BaseURL + "/" + shortID}
-
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
+		if existed {
+			w.WriteHeader(http.StatusConflict)
+		} else {
+			w.WriteHeader(http.StatusCreated)
+		}
 		json.NewEncoder(w).Encode(resp)
 	}
 }
