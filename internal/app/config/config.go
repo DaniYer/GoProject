@@ -12,7 +12,7 @@ const (
 	DefaultFileStoragePath = "storage.json"
 	DefaultServerAddress   = "localhost:8080"
 	DefaultBaseURL         = "http://localhost:8080"
-	DefaultDatabaseDSN     = "postgres://postgres:sqwaed21@localhost:5432/urls?sslmode=disable"
+	DefaultDatabaseDSN     = "localhost"
 )
 
 type Config struct {

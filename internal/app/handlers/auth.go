@@ -11,10 +11,6 @@ import (
 func GetUserURLsHandler(svc *service.URLService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Context().Value(middlewares.UserIDKey).(string)
-		if userID == "" {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
 
 		urls, err := svc.GetAllUserURLs(userID)
 		if err != nil {

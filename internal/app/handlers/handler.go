@@ -17,6 +17,7 @@ func NewHandleShortenURLv13(svc *service.URLService) http.HandlerFunc {
 }
 
 func HandleShortenURLv13(w http.ResponseWriter, r *http.Request, svc *service.URLService) {
+
 	userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 	var req dto.ShortenRequest
@@ -35,11 +36,12 @@ func HandleShortenURLv13(w http.ResponseWriter, r *http.Request, svc *service.UR
 		Result: fmt.Sprintf("%s/%s", svc.BaseURL, shortID),
 	}
 
+	w.Header().Set("Content-Type", "application/json")
+
 	if isDuplicate {
 		w.WriteHeader(http.StatusConflict)
 	} else {
 		w.WriteHeader(http.StatusCreated)
 	}
-	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 
@@ -27,11 +28,12 @@ func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, svc *servic
 	originalURL := string(body)
 
 	existingShortURL, err := svc.Store.GetByOriginalURL(originalURL)
+	resp := map[string]string{"result": svc.BaseURL + "/" + existingShortURL}
+
+	w.Header().Set("Content-Type", "application/json")
 	if err == nil {
-		resultURL := svc.BaseURL + "/" + existingShortURL
-		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusConflict)
-		w.Write([]byte(resultURL))
+		json.NewEncoder(w).Encode(resp)
 		return
 	}
 
@@ -42,10 +44,7 @@ func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, svc *servic
 		return
 	}
 
-	resultURL := svc.BaseURL + "/" + shortID
-	w.Header().Set("Content-Type", "text/plain")
+	resp = map[string]string{"result": svc.BaseURL + "/" + shortID}
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(resultURL))
+	json.NewEncoder(w).Encode(resp)
 }
-
-// GenerateShortURLHandler обрабатывает запросы на генерацию коротких URL
