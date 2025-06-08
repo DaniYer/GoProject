@@ -10,7 +10,7 @@ import (
 )
 
 const getByShortURL = `-- name: GetByShortURL :one
-SELECT original_url FROM urls WHERE short_url = $1
+SELECT original_url FROM urls WHERE short_url = $1 AND is_deleted = false
 `
 
 func (q *Queries) GetByShortURL(ctx context.Context, shortUrl string) (string, error) {

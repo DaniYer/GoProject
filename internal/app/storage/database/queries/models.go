@@ -4,8 +4,13 @@
 
 package queries
 
+import (
+	"database/sql"
+)
+
 type Url struct {
 	ID          int32
 	ShortUrl    string
 	OriginalUrl string
+	UserID      sql.NullString
 }
