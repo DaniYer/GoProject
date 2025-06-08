@@ -7,11 +7,12 @@ package queries
 
 import (
 	"context"
+	"database/sql"
 )
 
 const insertOrGetShortURL = `-- name: InsertOrGetShortURL :one
-INSERT INTO urls (short_url, original_url)
-VALUES ($1, $2)
+INSERT INTO urls (short_url, original_url, user_id)
+VALUES ($1, $2, $3)
 ON CONFLICT (original_url) DO NOTHING
 RETURNING short_url
 `
@@ -19,10 +20,11 @@ RETURNING short_url
 type InsertOrGetShortURLParams struct {
 	ShortUrl    string
 	OriginalUrl string
+	UserID      sql.NullString
 }
 
 func (q *Queries) InsertOrGetShortURL(ctx context.Context, arg InsertOrGetShortURLParams) (string, error) {
-	row := q.db.QueryRowContext(ctx, insertOrGetShortURL, arg.ShortUrl, arg.OriginalUrl)
+	row := q.db.QueryRowContext(ctx, insertOrGetShortURL, arg.ShortUrl, arg.OriginalUrl, arg.UserID)
 	var short_url string
 	err := row.Scan(&short_url)
 	return short_url, err

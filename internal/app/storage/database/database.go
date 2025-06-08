@@ -6,10 +6,9 @@ import (
 	"errors"
 	"time"
 
+	"github.com/DaniYer/GoProject.git/internal/app/dto"
 	"github.com/DaniYer/GoProject.git/internal/app/storage/database/queries"
-	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx"
-	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -24,13 +23,15 @@ func NewDBStore(db *sql.DB) *DBStore {
 		queries: queries.New(db),
 	}
 }
-func (s *DBStore) Save(shortURL, originalURL string) (string, error) {
+
+func (s *DBStore) Save(shortURL, originalURL, userID string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
 	newShortURL, err := s.queries.InsertOrGetShortURL(ctx, queries.InsertOrGetShortURLParams{
 		ShortUrl:    shortURL,
 		OriginalUrl: originalURL,
+		UserID:      sql.NullString{String: userID, Valid: true},
 	})
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -70,29 +71,23 @@ func (s *DBStore) GetByOriginalURL(originalURL string) (string, error) {
 	return result, nil
 }
 
-func (s *DBStore) SaveWithConflict(shortURL, originalURL string) (string, error) {
+func (s *DBStore) GetAllByUser(userID string) ([]dto.UserURL, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	shortURL, err := s.queries.InsertOrGetShortURL(ctx, queries.InsertOrGetShortURLParams{
-		ShortUrl:    shortURL,
-		OriginalUrl: originalURL,
-	})
-	if err == nil {
-		return shortURL, nil
+	urls, err := s.queries.GetAllByUserID(ctx, sql.NullString{String: userID, Valid: true})
+	if err != nil {
+		return nil, err
 	}
 
-	// Проверяем тип ошибки
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-		existingShortURL, err2 := s.GetByOriginalURL(originalURL)
-		if err2 != nil {
-			return "", err2
-		}
-		return existingShortURL, nil
+	result := make([]dto.UserURL, 0, len(urls))
+	for _, u := range urls {
+		result = append(result, dto.UserURL{
+			ShortURL:    u.ShortUrl,
+			OriginalURL: u.OriginalUrl,
+		})
 	}
-
-	return "", err
+	return result, nil
 }
 
 func InitDB(driverName, dataSourceName string) (*sql.DB, error) {

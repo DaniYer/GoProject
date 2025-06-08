@@ -36,23 +36,23 @@ func InitializeApp() error {
 		store service.URLStore
 	)
 
+	// 1. БД
 	if cfg.DatabaseDSN != "" && cfg.DatabaseDSN != config.DefaultDatabaseDSN {
 		db, err = database.InitDB("pgx", cfg.DatabaseDSN)
 		if err != nil {
 			sugar.Errorf("Ошибка подключения к БД: %v", err)
 			return err
 		}
-
 		if err := goose.Up(db, "internal/app/storage/database/migrations"); err != nil {
 			sugar.Errorf("Ошибка применения миграций: %v", err)
 			return err
 		}
-
 		store = database.NewDBStore(db)
 	}
 
+	// 2. FileStorage
 	if store == nil && cfg.FileStoragePath != "" {
-		fs, err := file.NewFileStore(cfg.FileStoragePath, sugar)
+		fs, err := file.NewFileStore(cfg.FileStoragePath)
 		if err != nil {
 			sugar.Errorf("Ошибка инициализации файлового хранилища: %v", err)
 		} else {
@@ -60,6 +60,7 @@ func InitializeApp() error {
 		}
 	}
 
+	// 3. In-memory fallback
 	if store == nil {
 		sugar.Infof("Используется in-memory хранилище")
 		store = memory.NewMemoryStore()
@@ -76,13 +77,17 @@ func InitializeApp() error {
 
 	router.Use(middlewares.WithLogging)
 	router.Use(middlewares.GzipHandle)
+	router.Use(middlewares.AuthMiddleware)
 
 	// Роуты
 	router.Post("/", handlers.NewGenerateShortURLHandler(&urlService))
 	router.Post("/api/shorten/batch", handlers.NewBatchShortenURLHandler(&urlService))
-	router.Get("/{id}", handlers.NewRedirectToOriginalURL(store))
+	// router.Get("/{id}", handlers.NewRedirectToOriginalURL(store))
+	router.Get("/{id}", handlers.NewRedirectToOriginalURL(&urlService))
+
 	router.Get("/ping", handlers.PingDBInit(db))
 	router.Post("/api/shorten", handlers.NewHandleShortenURLv13(&urlService))
+	router.Get("/api/user/urls", handlers.GetUserURLsHandler(&urlService))
 
 	if err := http.ListenAndServe(cfg.ServerAddress, router); err != nil {
 		sugar.Errorf("Ошибка сервера: %v", err)

@@ -1,25 +1,58 @@
 package service
 
-import "github.com/DaniYer/GoProject.git/internal/app/dto"
+import (
+	"github.com/DaniYer/GoProject.git/internal/app/dto"
+)
 
-// Структура сервиса
 type URLService struct {
 	Store   URLStore
 	BaseURL string
 }
+
 type URLStore interface {
-	Save(shortURL, originalURL string) (string, error)
+	Save(shortURL, originalURL, userID string) (string, error)
 	Get(shortURL string) (string, error)
 	GetByOriginalURL(originalURL string) (string, error)
+	GetAllByUser(userID string) ([]dto.UserURL, error)
 }
 
-// Бизнес-логика для батча
-func (s *URLService) ShortenBatch(requests []dto.BatchRequest) ([]dto.BatchResponse, error) {
+// Plain text shorten (POST "/")
+func (s *URLService) Shorten(originalURL, userID string) (string, bool, error) {
+	existingShortURL, err := s.Store.GetByOriginalURL(originalURL)
+	if err == nil {
+		return existingShortURL, true, nil
+	}
+
+	shortID := GenerateRandomID()
+	shortID, err = s.Store.Save(shortID, originalURL, userID)
+	if err != nil {
+		return "", false, err
+	}
+	return shortID, false, nil
+}
+
+// JSON shorten (POST "/api/shorten")
+func (s *URLService) ShortenJSON(originalURL, userID string) (string, bool, error) {
+	existingShortURL, err := s.Store.GetByOriginalURL(originalURL)
+	if err == nil {
+		return existingShortURL, true, nil
+	}
+
+	shortID := GenerateRandomID()
+	shortID, err = s.Store.Save(shortID, originalURL, userID)
+	if err != nil {
+		return "", false, err
+	}
+	return shortID, false, nil
+}
+
+// Batch shorten (POST "/api/shorten/batch")
+func (s *URLService) ShortenBatch(requests []dto.BatchRequest, userID string) ([]dto.BatchResponse, error) {
 	responses := make([]dto.BatchResponse, len(requests))
 
 	for i, req := range requests {
 		shortURL := GenerateRandomID()
-		if _, err := s.Store.Save(shortURL, req.OriginalURL); err != nil {
+		if _, err := s.Store.Save(shortURL, req.OriginalURL, userID); err != nil {
 			return nil, err
 		}
 		responses[i] = dto.BatchResponse{
@@ -30,35 +63,14 @@ func (s *URLService) ShortenBatch(requests []dto.BatchRequest) ([]dto.BatchRespo
 	return responses, nil
 }
 
-// Single shorten service (для plain text запросов)
-func (s *URLService) Shorten(originalURL string) (string, bool, error) {
-	shortID := GenerateRandomID()
-	shortID, err := s.Store.Save(shortID, originalURL)
+// User URLs (GET "/api/user/urls")
+func (s *URLService) GetAllUserURLs(userID string) ([]dto.UserURL, error) {
+	urls, err := s.Store.GetAllByUser(userID)
 	if err != nil {
-		return "", false, err
+		return nil, err
 	}
-
-	// Если короткий URL уже существовал — мы определяем это так:
-	existingShortURL, _ := s.Store.GetByOriginalURL(originalURL)
-	if existingShortURL == shortID {
-		return shortID, false, nil
+	for i := range urls {
+		urls[i].ShortURL = s.BaseURL + "/" + urls[i].ShortURL
 	}
-	return shortID, true, nil
-}
-
-// JSON shorten service
-func (s *URLService) ShortenJSON(originalURL string) (string, bool, error) {
-	existingShortURL, err := s.Store.GetByOriginalURL(originalURL)
-	if err == nil {
-		return existingShortURL, true, nil
-	}
-
-	shortID := GenerateRandomID()
-
-	shortID, err = s.Store.Save(shortID, originalURL)
-	if err != nil {
-		return "", false, err
-	}
-	return shortID, false, nil
-
+	return urls, nil
 }
