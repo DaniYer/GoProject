@@ -14,6 +14,7 @@ type URLStore interface {
 	Get(shortURL string) (string, error)
 	GetByOriginalURL(originalURL string) (string, error)
 	GetAllByUser(userID string) ([]dto.UserURL, error)
+	BatchDelete(userID string, shortURLs []string) error
 }
 
 // Plain text shorten (POST "/")
@@ -73,4 +74,8 @@ func (s *URLService) GetAllUserURLs(userID string) ([]dto.UserURL, error) {
 		urls[i].ShortURL = s.BaseURL + "/" + urls[i].ShortURL
 	}
 	return urls, nil
+}
+
+func (s *URLService) BatchDelete(userID string, shortURLs []string) error {
+	return s.Store.BatchDelete(userID, shortURLs)
 }

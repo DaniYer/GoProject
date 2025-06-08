@@ -126,3 +126,7 @@ func (fs *FileStore) GetAllByUser(userID string) ([]dto.UserURL, error) {
 	}
 	return result, nil
 }
+func (fs *FileStore) BatchDelete(userID string, shortURLs []string) error {
+	// Заглушка — в файловом хранилище физическое удаление не реализовано.
+	return nil
+}

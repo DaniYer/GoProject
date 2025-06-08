@@ -79,3 +79,16 @@ func (m *MemoryStore) GetAllByUser(userID string) ([]dto.UserURL, error) {
 
 	return result, nil
 }
+
+func (m *MemoryStore) BatchDelete(userID string, shortURLs []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, shortURL := range shortURLs {
+		delete(m.data, shortURL)
+		if urls, ok := m.byUID[userID]; ok {
+			delete(urls, shortURL)
+		}
+	}
+	return nil
+}

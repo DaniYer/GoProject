@@ -55,6 +55,9 @@ func (s *DBStore) Get(shortURL string) (string, error) {
 
 	result, err := s.queries.GetByShortURL(ctx, shortURL)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", errors.New("gone")
+		}
 		return "", err
 	}
 	return result, nil
@@ -88,6 +91,16 @@ func (s *DBStore) GetAllByUser(userID string) ([]dto.UserURL, error) {
 		})
 	}
 	return result, nil
+}
+
+func (s *DBStore) BatchDelete(userID string, shortURLs []string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	return s.queries.BatchDeleteURLs(ctx, queries.BatchDeleteURLsParams{
+		UserID:  sql.NullString{String: userID, Valid: true},
+		Column2: shortURLs,
+	})
 }
 
 func InitDB(driverName, dataSourceName string) (*sql.DB, error) {
