@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/DaniYer/GoProject.git/internal/app/config"
 	"github.com/DaniYer/GoProject.git/internal/app/handlers"
@@ -24,7 +25,7 @@ func InitializeApp() error {
 
 	logger, err := zap.NewDevelopment()
 	if err != nil {
-		return fmt.Errorf("ошибка инициализации логгера: %w", err)
+		return fmt.Errorf("init logger err: %w", err)
 	}
 	defer logger.Sync()
 	sugar := logger.Sugar()
@@ -35,14 +36,14 @@ func InitializeApp() error {
 		store service.URLStore
 	)
 
-	if cfg.DatabaseDSN != "" && cfg.DatabaseDSN != config.DefaultDatabaseDSN {
+	if cfg.DatabaseDSN != "" {
 		db, err = database.InitDB("pgx", cfg.DatabaseDSN)
 		if err != nil {
-			sugar.Errorf("Ошибка подключения к БД: %v", err)
+			sugar.Errorf("DB connect error: %v", err)
 			return err
 		}
 		if err := goose.Up(db, "internal/app/storage/database/migrations"); err != nil {
-			sugar.Errorf("Ошибка применения миграций: %v", err)
+			sugar.Errorf("Migrations error: %v", err)
 			return err
 		}
 		store = database.NewDBStore(db)
@@ -51,14 +52,14 @@ func InitializeApp() error {
 	if store == nil && cfg.FileStoragePath != "" {
 		fs, err := file.NewFileStore(cfg.FileStoragePath)
 		if err != nil {
-			sugar.Errorf("Ошибка инициализации файлового хранилища: %v", err)
+			sugar.Errorf("File store error: %v", err)
 		} else {
 			store = fs
 		}
 	}
 
 	if store == nil {
-		sugar.Infof("Используется in-memory хранилище")
+		sugar.Infof("Fallback in-memory store")
 		store = memory.NewMemoryStore()
 	}
 
@@ -67,33 +68,32 @@ func InitializeApp() error {
 		BaseURL: cfg.BaseURL,
 	}
 
-	// создаем worker
-	deleteWorker := worker.NewDeleteWorker(urlService.Store, 100)
-	deleteWorker.Start()
+	// создаем worker pool
+	pool := worker.NewDeleteWorkerPool(store, 1024, 10, 2*time.Second)
+	pool.Start()
+	defer pool.Shutdown()
 
 	router := chi.NewRouter()
 
-	sugar.Infow("Запуск сервера", "адрес", cfg.ServerAddress)
+	sugar.Infow("Start server", "addr", cfg.ServerAddress)
 
 	router.Use(middlewares.WithLogging)
 	router.Use(middlewares.GzipHandle)
 	router.Use(middlewares.AuthMiddleware)
 
-	// Роуты
 	router.Post("/", handlers.NewGenerateShortURLHandler(&urlService))
 	router.Post("/api/shorten/batch", handlers.NewBatchShortenURLHandler(&urlService))
-	router.Get("/{id}", handlers.NewRedirectToOriginalURL(&urlService))
-
-	router.Get("/ping", handlers.PingDBInit(db))
 	router.Post("/api/shorten", handlers.NewHandleShortenURLv13(&urlService))
+	router.Get("/{id}", handlers.NewRedirectToOriginalURL(&urlService))
+	router.Get("/ping", handlers.PingDBInit(db))
 	router.Get("/api/user/urls", handlers.GetUserURLsHandler(&urlService))
-	router.Delete("/api/user/urls", handlers.NewBatchDeleteHandler(handlers.BatchDeleteDeps{
-		Service: &urlService,
-		Worker:  deleteWorker,
-	}))
+	router.Delete("/api/user/urls", (&handlers.DeleteHandler{
+		Svc:  &urlService,
+		Pool: pool,
+	}).ServeHTTP)
 
 	if err := http.ListenAndServe(cfg.ServerAddress, router); err != nil {
-		sugar.Errorf("Ошибка сервера: %v", err)
+		sugar.Errorf("Server error: %v", err)
 	}
 	return nil
 }

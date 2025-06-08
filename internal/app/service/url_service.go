@@ -17,7 +17,7 @@ type URLStore interface {
 	BatchDelete(userID string, shortURLs []string) error
 }
 
-// Plain text shorten (POST "/")
+// Для POST "/"
 func (s *URLService) Shorten(originalURL, userID string) (string, bool, error) {
 	existingShortURL, err := s.Store.GetByOriginalURL(originalURL)
 	if err == nil {
@@ -32,39 +32,30 @@ func (s *URLService) Shorten(originalURL, userID string) (string, bool, error) {
 	return shortID, false, nil
 }
 
-// JSON shorten (POST "/api/shorten")
+// Для POST "/api/shorten"
 func (s *URLService) ShortenJSON(originalURL, userID string) (string, bool, error) {
-	existingShortURL, err := s.Store.GetByOriginalURL(originalURL)
-	if err == nil {
-		return existingShortURL, true, nil
-	}
-
-	shortID := GenerateRandomID()
-	shortID, err = s.Store.Save(shortID, originalURL, userID)
-	if err != nil {
-		return "", false, err
-	}
-	return shortID, false, nil
+	return s.Shorten(originalURL, userID)
 }
 
-// Batch shorten (POST "/api/shorten/batch")
+// Для POST "/api/shorten/batch"
 func (s *URLService) ShortenBatch(requests []dto.BatchRequest, userID string) ([]dto.BatchResponse, error) {
 	responses := make([]dto.BatchResponse, len(requests))
 
 	for i, req := range requests {
-		shortURL := GenerateRandomID()
-		if _, err := s.Store.Save(shortURL, req.OriginalURL, userID); err != nil {
+		shortID := GenerateRandomID()
+		_, err := s.Store.Save(shortID, req.OriginalURL, userID)
+		if err != nil {
 			return nil, err
 		}
 		responses[i] = dto.BatchResponse{
 			CorrelationID: req.CorrelationID,
-			ShortURL:      s.BaseURL + "/" + shortURL,
+			ShortURL:      s.BaseURL + "/" + shortID,
 		}
 	}
 	return responses, nil
 }
 
-// User URLs (GET "/api/user/urls")
+// Для GET "/api/user/urls"
 func (s *URLService) GetAllUserURLs(userID string) ([]dto.UserURL, error) {
 	urls, err := s.Store.GetAllByUser(userID)
 	if err != nil {
@@ -76,6 +67,7 @@ func (s *URLService) GetAllUserURLs(userID string) ([]dto.UserURL, error) {
 	return urls, nil
 }
 
+// Для удаления (worker pool)
 func (s *URLService) BatchDelete(userID string, shortURLs []string) error {
 	return s.Store.BatchDelete(userID, shortURLs)
 }

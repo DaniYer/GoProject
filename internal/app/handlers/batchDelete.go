@@ -10,24 +10,26 @@ import (
 	"github.com/DaniYer/GoProject.git/internal/app/worker"
 )
 
-type BatchDeleteDeps struct {
-	Service *service.URLService
-	Worker  *worker.DeleteWorker
+type DeleteHandler struct {
+	Svc  *service.URLService
+	Pool *worker.DeleteWorkerPool
 }
 
-func NewBatchDeleteHandler(deps BatchDeleteDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		userID := r.Context().Value(middlewares.UserIDKey).(string)
+func (h *DeleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value(middlewares.UserIDKey).(string)
 
-		var req dto.DeleteRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request", http.StatusBadRequest)
-			return
-		}
-
-		// Передаем в воркер
-		deps.Worker.Queue <- worker.DeleteTask{UserID: userID, ShortURLs: req}
-
-		w.WriteHeader(http.StatusAccepted)
+	var req dto.DeleteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
 	}
+
+	for _, short := range req {
+		h.Pool.AddTask(worker.DeleteTask{
+			UserID: userID,
+			Short:  short,
+		})
+	}
+
+	w.WriteHeader(http.StatusAccepted)
 }
