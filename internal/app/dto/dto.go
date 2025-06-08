@@ -9,6 +9,7 @@ type BatchResponse struct {
 	CorrelationID string `json:"correlation_id"`
 	ShortURL      string `json:"short_url"`
 }
+
 type ShortenRequest struct {
 	URL string `json:"url"`
 }
@@ -23,9 +24,3 @@ type UserURL struct {
 }
 
 type DeleteRequest []string
-
-type StoredURL struct {
-    OriginalURL string
-    UserID      string
-}
-map[string]StoredURL
