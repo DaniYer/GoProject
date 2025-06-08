@@ -10,11 +10,12 @@ import (
 type StoredURL struct {
 	OriginalURL string
 	UserID      string
+	Deleted     bool
 }
 
 type MemoryStore struct {
 	mu   sync.RWMutex
-	data map[string]StoredURL // key: shortURL -> StoredURL
+	data map[string]StoredURL
 }
 
 func NewMemoryStore() *MemoryStore {
@@ -27,7 +28,7 @@ func (m *MemoryStore) Save(shortURL, originalURL, userID string) (string, error)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Если originalURL уже существует, возвращаем старую короткую ссылку
+	// Если originalURL уже существует — возвращаем старую сокращённую ссылку
 	for short, record := range m.data {
 		if record.OriginalURL == originalURL {
 			return short, nil
@@ -37,6 +38,7 @@ func (m *MemoryStore) Save(shortURL, originalURL, userID string) (string, error)
 	m.data[shortURL] = StoredURL{
 		OriginalURL: originalURL,
 		UserID:      userID,
+		Deleted:     false,
 	}
 	return shortURL, nil
 }
@@ -49,6 +51,9 @@ func (m *MemoryStore) Get(shortURL string) (string, error) {
 	if !ok {
 		return "", errors.New("not found")
 	}
+	if record.Deleted {
+		return "", errors.New("gone")
+	}
 	return record.OriginalURL, nil
 }
 
@@ -57,7 +62,7 @@ func (m *MemoryStore) GetByOriginalURL(originalURL string) (string, error) {
 	defer m.mu.RUnlock()
 
 	for short, record := range m.data {
-		if record.OriginalURL == originalURL {
+		if record.OriginalURL == originalURL && !record.Deleted {
 			return short, nil
 		}
 	}
@@ -70,7 +75,7 @@ func (m *MemoryStore) GetAllByUser(userID string) ([]dto.UserURL, error) {
 
 	var result []dto.UserURL
 	for short, record := range m.data {
-		if record.UserID == userID {
+		if record.UserID == userID && !record.Deleted {
 			result = append(result, dto.UserURL{
 				ShortURL:    short,
 				OriginalURL: record.OriginalURL,
@@ -87,7 +92,8 @@ func (m *MemoryStore) BatchDelete(userID string, shortURLs []string) error {
 	for _, shortURL := range shortURLs {
 		record, ok := m.data[shortURL]
 		if ok && record.UserID == userID {
-			delete(m.data, shortURL)
+			record.Deleted = true
+			m.data[shortURL] = record
 		}
 	}
 	return nil
