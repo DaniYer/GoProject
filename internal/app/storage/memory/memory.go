@@ -28,9 +28,9 @@ func (m *MemoryStore) Save(shortURL, originalURL, userID string) (string, error)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Если originalURL уже существует — возвращаем старую сокращённую ссылку
+	// Проверяем существование по OriginalURL
 	for short, record := range m.data {
-		if record.OriginalURL == originalURL {
+		if record.OriginalURL == originalURL && !record.Deleted {
 			return short, nil
 		}
 	}
