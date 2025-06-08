@@ -14,13 +14,15 @@ type StoredURL struct {
 }
 
 type MemoryStore struct {
-	mu   sync.RWMutex
-	data map[string]StoredURL
+	mu          sync.RWMutex
+	data        map[string]StoredURL // shortURL → StoredURL
+	originalIdx map[string]string    // originalURL → shortURL
 }
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		data: make(map[string]StoredURL),
+		data:        make(map[string]StoredURL),
+		originalIdx: make(map[string]string),
 	}
 }
 
@@ -28,10 +30,10 @@ func (m *MemoryStore) Save(shortURL, originalURL, userID string) (string, error)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Проверяем существование по OriginalURL
-	for short, record := range m.data {
-		if record.OriginalURL == originalURL && !record.Deleted {
-			return short, nil
+	if existingShort, ok := m.originalIdx[originalURL]; ok {
+		record := m.data[existingShort]
+		if !record.Deleted {
+			return existingShort, nil
 		}
 	}
 
@@ -40,6 +42,7 @@ func (m *MemoryStore) Save(shortURL, originalURL, userID string) (string, error)
 		UserID:      userID,
 		Deleted:     false,
 	}
+	m.originalIdx[originalURL] = shortURL
 	return shortURL, nil
 }
 
