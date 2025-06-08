@@ -10,6 +10,8 @@ import (
 	"github.com/DaniYer/GoProject.git/internal/app/middlewares"
 	"github.com/DaniYer/GoProject.git/internal/app/service"
 	"github.com/DaniYer/GoProject.git/internal/app/storage/database"
+	"github.com/DaniYer/GoProject.git/internal/app/storage/file"
+	"github.com/DaniYer/GoProject.git/internal/app/storage/memory"
 	"github.com/go-chi/chi/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose"
@@ -34,24 +36,34 @@ func InitializeApp() error {
 		store service.URLStore
 	)
 
+	// 1. БД
 	if cfg.DatabaseDSN != "" && cfg.DatabaseDSN != config.DefaultDatabaseDSN {
 		db, err = database.InitDB("pgx", cfg.DatabaseDSN)
 		if err != nil {
 			sugar.Errorf("Ошибка подключения к БД: %v", err)
 			return err
 		}
-
 		if err := goose.Up(db, "internal/app/storage/database/migrations"); err != nil {
 			sugar.Errorf("Ошибка применения миграций: %v", err)
 			return err
 		}
-
 		store = database.NewDBStore(db)
 	}
 
+	// 2. FileStorage
+	if store == nil && cfg.FileStoragePath != "" {
+		fs, err := file.NewFileStore(cfg.FileStoragePath)
+		if err != nil {
+			sugar.Errorf("Ошибка инициализации файлового хранилища: %v", err)
+		} else {
+			store = fs
+		}
+	}
+
+	// 3. In-memory fallback
 	if store == nil {
-		sugar.Errorf("Хранилище не инициализировано — необходима база данных")
-		return fmt.Errorf("нет базы данных")
+		sugar.Infof("Используется in-memory хранилище")
+		store = memory.NewMemoryStore()
 	}
 
 	urlService := service.URLService{

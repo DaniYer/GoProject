@@ -3,103 +3,126 @@ package file
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"os"
+	"sync"
 
-	"go.uber.org/zap"
+	"github.com/DaniYer/GoProject.git/internal/app/dto"
 )
 
-// Record представляет запись для хранения URL.
+type FileStore struct {
+	mu     sync.RWMutex
+	data   map[string]Record // shortURL -> Record
+	file   *os.File
+	writer *bufio.Writer
+}
+
 type Record struct {
-	UUID        string `json:"uuid"`
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
+	UserID      string `json:"user_id"`
 }
 
-// FileStore – реализация URLStore, использующая файл для персистентности.
-type FileStore struct {
-	filePath string
-	data     map[string]string
-}
-
-func NewFileStore(filePath string, sugar *zap.SugaredLogger) (*FileStore, error) {
-	store, err := loadStorageFromFile(filePath, sugar)
+func NewFileStore(path string) (*FileStore, error) {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
 	if err != nil {
 		return nil, err
 	}
-	return &FileStore{filePath: filePath, data: store}, nil
-}
 
-func (fs *FileStore) Save(shortURL, originalURL string) (string, error) {
-	fs.data[shortURL] = originalURL
-	rec := Record{
-		UUID:        "", // для FileStore не требуется генерация UUID
-		ShortURL:    shortURL,
-		OriginalURL: originalURL,
+	store := &FileStore{
+		data:   make(map[string]Record),
+		file:   file,
+		writer: bufio.NewWriter(file),
 	}
-	return shortURL, appendRecordToFile(rec, fs.filePath)
-}
 
-func (fs *FileStore) Get(shortURL string) (string, error) {
-	if url, ok := fs.data[shortURL]; ok {
-		return url, nil
-	}
-	return "", fmt.Errorf("not found")
-}
-
-// loadStorageFromFile загружает записи из файла в карту.
-func loadStorageFromFile(filePath string, sugar *zap.SugaredLogger) (map[string]string, error) {
-	store := make(map[string]string)
-	file, err := os.Open(filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return store, nil
-		}
+	if err := store.load(); err != nil {
 		return nil, err
 	}
-	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		var rec Record
-		if err := json.Unmarshal([]byte(line), &rec); err != nil {
-			sugar.Errorf("Ошибка парсинга записи: %v", err)
-			continue
-		}
-		store[rec.ShortURL] = rec.OriginalURL
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
 	return store, nil
 }
 
-// appendRecordToFile дописывает запись в файл.
-func appendRecordToFile(rec Record, filePath string) error {
-	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
+func (fs *FileStore) load() error {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
 
-	recBytes, err := json.Marshal(rec)
-	if err != nil {
-		return err
+	scanner := bufio.NewScanner(fs.file)
+	for scanner.Scan() {
+		var rec Record
+		if err := json.Unmarshal(scanner.Bytes(), &rec); err != nil {
+			continue
+		}
+		fs.data[rec.ShortURL] = rec
 	}
-	_, err = file.Write(append(recBytes, '\n'))
-	return err
+	return scanner.Err()
 }
 
-func (fs *FileStore) SaveWithConflict(shortURL, originalURL string) (string, error) {
-	shortURL, err := fs.Save(shortURL, originalURL)
-	return shortURL, err
+func (fs *FileStore) Save(shortURL, originalURL, userID string) (string, error) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	if _, exists := fs.data[shortURL]; exists {
+		return shortURL, nil
+	}
+
+	rec := Record{
+		ShortURL:    shortURL,
+		OriginalURL: originalURL,
+		UserID:      userID,
+	}
+
+	data, err := json.Marshal(rec)
+	if err != nil {
+		return "", err
+	}
+
+	if _, err := fs.writer.Write(append(data, '\n')); err != nil {
+		return "", err
+	}
+
+	if err := fs.writer.Flush(); err != nil {
+		return "", err
+	}
+
+	fs.data[shortURL] = rec
+	return shortURL, nil
 }
+
+func (fs *FileStore) Get(shortURL string) (string, error) {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
+	rec, ok := fs.data[shortURL]
+	if !ok {
+		return "", errors.New("url not found")
+	}
+	return rec.OriginalURL, nil
+}
+
 func (fs *FileStore) GetByOriginalURL(originalURL string) (string, error) {
-	for short, orig := range fs.data {
-		if orig == originalURL {
-			return short, nil
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
+	for _, rec := range fs.data {
+		if rec.OriginalURL == originalURL {
+			return rec.ShortURL, nil
 		}
 	}
-	return "", fmt.Errorf("not found")
+	return "", errors.New("original url not found")
+}
+
+func (fs *FileStore) GetAllByUser(userID string) ([]dto.UserURL, error) {
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
+	var result []dto.UserURL
+	for _, rec := range fs.data {
+		if rec.UserID == userID {
+			result = append(result, dto.UserURL{
+				ShortURL:    rec.ShortURL,
+				OriginalURL: rec.OriginalURL,
+			})
+		}
+	}
+	return result, nil
 }
