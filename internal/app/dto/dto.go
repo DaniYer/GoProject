@@ -16,3 +16,8 @@ type ShortenRequest struct {
 type ShortenResponse struct {
 	Result string `json:"result"`
 }
+
+type UserURL struct {
+	ShortURL    string `json:"short_url"`
+	OriginalURL string `json:"original_url"`
+}

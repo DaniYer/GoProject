@@ -2,10 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
-	"io"
+	"fmt"
 	"net/http"
 
 	"github.com/DaniYer/GoProject.git/internal/app/dto"
+	"github.com/DaniYer/GoProject.git/internal/app/middlewares"
 	"github.com/DaniYer/GoProject.git/internal/app/service"
 )
 
@@ -16,34 +17,29 @@ func NewHandleShortenURLv13(svc *service.URLService) http.HandlerFunc {
 }
 
 func HandleShortenURLv13(w http.ResponseWriter, r *http.Request, svc *service.URLService) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Ошибка чтения тела", http.StatusBadRequest)
-		return
-	}
-	defer r.Body.Close()
+	userID := r.Context().Value(middlewares.UserIDKey).(string)
 
 	var req dto.ShortenRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		http.Error(w, "Ошибка парсинга JSON", http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
 
-	shortID, isConflict, err := svc.ShortenJSON(req.URL)
+	shortID, isDuplicate, err := svc.ShortenJSON(req.URL, userID)
 	if err != nil {
-		http.Error(w, "Ошибка сохранения", http.StatusInternalServerError)
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
-	resp := dto.ShortenResponse{Result: svc.BaseURL + "/" + shortID}
+	resp := dto.ShortenResponse{
+		Result: fmt.Sprintf("%s/%s", svc.BaseURL, shortID),
+	}
 
-	w.Header().Set("Content-Type", "application/json")
-
-	if isConflict {
+	if isDuplicate {
 		w.WriteHeader(http.StatusConflict)
 	} else {
 		w.WriteHeader(http.StatusCreated)
 	}
-
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }

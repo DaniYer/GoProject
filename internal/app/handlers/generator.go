@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/DaniYer/GoProject.git/internal/app/middlewares"
 	"github.com/DaniYer/GoProject.git/internal/app/service"
 )
 
@@ -14,6 +15,8 @@ func NewGenerateShortURLHandler(svc *service.URLService) http.HandlerFunc {
 }
 
 func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, svc *service.URLService) {
+	userID := r.Context().Value(middlewares.UserIDKey).(string)
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Ошибка чтения тела", http.StatusBadRequest)
@@ -33,8 +36,7 @@ func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, svc *servic
 	}
 
 	shortID := service.GenerateRandomID()
-
-	shortID, err = svc.Store.Save(shortID, originalURL)
+	shortID, err = svc.Store.Save(shortID, originalURL, userID)
 	if err != nil {
 		http.Error(w, "Ошибка сохранения", http.StatusInternalServerError)
 		return
