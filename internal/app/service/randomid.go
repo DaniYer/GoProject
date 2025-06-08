@@ -1,4 +1,4 @@
-package randomid
+package service
 
 import (
 	"crypto/rand"
