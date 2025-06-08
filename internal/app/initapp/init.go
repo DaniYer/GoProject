@@ -21,7 +21,6 @@ import (
 func InitializeApp() error {
 	cfg := config.NewConfig()
 
-	// Логгер
 	logger, err := zap.NewDevelopment()
 	if err != nil {
 		return fmt.Errorf("ошибка инициализации логгера: %w", err)
@@ -30,13 +29,11 @@ func InitializeApp() error {
 	sugar := logger.Sugar()
 	middlewares.InitLogger(sugar)
 
-	// Выбираем хранилище
 	var (
 		db    *sql.DB
 		store service.URLStore
 	)
 
-	// 1. БД
 	if cfg.DatabaseDSN != "" && cfg.DatabaseDSN != config.DefaultDatabaseDSN {
 		db, err = database.InitDB("pgx", cfg.DatabaseDSN)
 		if err != nil {
@@ -50,7 +47,6 @@ func InitializeApp() error {
 		store = database.NewDBStore(db)
 	}
 
-	// 2. FileStorage
 	if store == nil && cfg.FileStoragePath != "" {
 		fs, err := file.NewFileStore(cfg.FileStoragePath)
 		if err != nil {
@@ -60,7 +56,6 @@ func InitializeApp() error {
 		}
 	}
 
-	// 3. In-memory fallback
 	if store == nil {
 		sugar.Infof("Используется in-memory хранилище")
 		store = memory.NewMemoryStore()
@@ -79,15 +74,12 @@ func InitializeApp() error {
 	router.Use(middlewares.GzipHandle)
 	router.Use(middlewares.AuthMiddleware)
 
-	// Роуты
 	router.Post("/", handlers.NewGenerateShortURLHandler(&urlService))
 	router.Post("/api/shorten/batch", handlers.NewBatchShortenURLHandler(&urlService))
 	router.Get("/{id}", handlers.NewRedirectToOriginalURL(&urlService))
-
 	router.Get("/ping", handlers.PingDBInit(db))
 	router.Post("/api/shorten", handlers.NewHandleShortenURLv13(&urlService))
 	router.Get("/api/user/urls", handlers.GetUserURLsHandler(&urlService))
-
 	router.Delete("/api/user/urls", handlers.NewBatchDeleteHandler(&urlService))
 
 	if err := http.ListenAndServe(cfg.ServerAddress, router); err != nil {

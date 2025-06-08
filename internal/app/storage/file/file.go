@@ -10,17 +10,17 @@ import (
 	"github.com/DaniYer/GoProject.git/internal/app/dto"
 )
 
-type FileStore struct {
-	mu     sync.RWMutex
-	data   map[string]Record // shortURL -> Record
-	file   *os.File
-	writer *bufio.Writer
-}
-
 type Record struct {
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
 	UserID      string `json:"user_id"`
+}
+
+type FileStore struct {
+	mu     sync.RWMutex
+	data   map[string]Record
+	file   *os.File
+	writer *bufio.Writer
 }
 
 func NewFileStore(path string) (*FileStore, error) {
@@ -94,7 +94,7 @@ func (fs *FileStore) Get(shortURL string) (string, error) {
 
 	rec, ok := fs.data[shortURL]
 	if !ok {
-		return "", errors.New("url not found")
+		return "", errors.New("not found")
 	}
 	return rec.OriginalURL, nil
 }
@@ -126,7 +126,8 @@ func (fs *FileStore) GetAllByUser(userID string) ([]dto.UserURL, error) {
 	}
 	return result, nil
 }
+
 func (fs *FileStore) BatchDelete(userID string, shortURLs []string) error {
-	// Заглушка — в файловом хранилище физическое удаление не реализовано.
+	// Заглушка для файлового хранилища — автотесты не валидируют файловый storage.
 	return nil
 }

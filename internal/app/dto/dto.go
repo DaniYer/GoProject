@@ -23,3 +23,9 @@ type UserURL struct {
 }
 
 type DeleteRequest []string
+
+type StoredURL struct {
+    OriginalURL string
+    UserID      string
+}
+map[string]StoredURL
