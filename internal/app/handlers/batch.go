@@ -1,4 +1,4 @@
-package batch
+package handlers
 
 import (
 	"encoding/json"
@@ -15,10 +15,6 @@ func NewBatchShortenURLHandler(svc *service.URLService) http.HandlerFunc {
 }
 
 func batchShortenHandler(w http.ResponseWriter, r *http.Request, svc *service.URLService) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		return
-	}
 
 	var requests []dto.BatchRequest
 	if err := json.NewDecoder(r.Body).Decode(&requests); err != nil {

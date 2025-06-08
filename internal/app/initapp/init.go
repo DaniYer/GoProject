@@ -5,14 +5,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/DaniYer/GoProject.git/internal/app/batch"
 	"github.com/DaniYer/GoProject.git/internal/app/config"
-	"github.com/DaniYer/GoProject.git/internal/app/gzipmiddleware"
-	"github.com/DaniYer/GoProject.git/internal/app/logging"
-	"github.com/DaniYer/GoProject.git/internal/app/ping"
-	"github.com/DaniYer/GoProject.git/internal/app/redirect"
+	"github.com/DaniYer/GoProject.git/internal/app/handlers"
+	"github.com/DaniYer/GoProject.git/internal/app/middlewares"
 	"github.com/DaniYer/GoProject.git/internal/app/service"
-	"github.com/DaniYer/GoProject.git/internal/app/shortener"
 	"github.com/DaniYer/GoProject.git/internal/app/storage/database"
 	"github.com/DaniYer/GoProject.git/internal/app/storage/file"
 	"github.com/DaniYer/GoProject.git/internal/app/storage/memory"
@@ -32,7 +28,7 @@ func InitializeApp() error {
 	}
 	defer logger.Sync()
 	sugar := logger.Sugar()
-	logging.InitLogger(sugar)
+	middlewares.InitLogger(sugar)
 
 	// Выбираем хранилище
 	var (
@@ -78,16 +74,15 @@ func InitializeApp() error {
 
 	sugar.Infow("Запуск сервера", "адрес", cfg.ServerAddress)
 
-	router.Use(logging.WithLogging)
-	router.Use(gzipmiddleware.GzipHandle)
+	router.Use(middlewares.WithLogging)
+	router.Use(middlewares.GzipHandle)
 
 	// Роуты
-	router.Post("/", shortener.NewGenerateShortURLHandler(&urlService))
-	router.Post("/api/shorten/batch", batch.NewBatchShortenURLHandler(&urlService))
-	router.Get("/{id}", redirect.NewRedirectToOriginalURL(store))
-	router.Get("/ping", func(w http.ResponseWriter, r *http.Request) { ping.PingDB(db, w) })
-
-	router.Post("/api/shorten", shortener.NewHandleShortenURLv13(&urlService))
+	router.Post("/", handlers.NewGenerateShortURLHandler(&urlService))
+	router.Post("/api/shorten/batch", handlers.NewBatchShortenURLHandler(&urlService))
+	router.Get("/{id}", handlers.NewRedirectToOriginalURL(store))
+	router.Get("/ping", handlers.PingDBInit(db))
+	router.Post("/api/shorten", handlers.NewHandleShortenURLv13(&urlService))
 
 	if err := http.ListenAndServe(cfg.ServerAddress, router); err != nil {
 		sugar.Errorf("Ошибка сервера: %v", err)

@@ -1,10 +1,9 @@
-package shortener
+package handlers
 
 import (
 	"io"
 	"net/http"
 
-	"github.com/DaniYer/GoProject.git/internal/app/randomid"
 	"github.com/DaniYer/GoProject.git/internal/app/service"
 )
 
@@ -33,7 +32,7 @@ func GenerateShortURLHandler(w http.ResponseWriter, r *http.Request, svc *servic
 		return
 	}
 
-	shortID := randomid.GenerateRandomID()
+	shortID := service.GenerateRandomID()
 
 	shortID, err = svc.Store.Save(shortID, originalURL)
 	if err != nil {

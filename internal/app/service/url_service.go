@@ -1,9 +1,6 @@
 package service
 
-import (
-	"github.com/DaniYer/GoProject.git/internal/app/dto"
-	"github.com/DaniYer/GoProject.git/internal/app/randomid"
-)
+import "github.com/DaniYer/GoProject.git/internal/app/dto"
 
 // Структура сервиса
 type URLService struct {
@@ -21,7 +18,7 @@ func (s *URLService) ShortenBatch(requests []dto.BatchRequest) ([]dto.BatchRespo
 	responses := make([]dto.BatchResponse, len(requests))
 
 	for i, req := range requests {
-		shortURL := randomid.GenerateRandomID()
+		shortURL := GenerateRandomID()
 		if _, err := s.Store.Save(shortURL, req.OriginalURL); err != nil {
 			return nil, err
 		}
@@ -35,7 +32,7 @@ func (s *URLService) ShortenBatch(requests []dto.BatchRequest) ([]dto.BatchRespo
 
 // Single shorten service (для plain text запросов)
 func (s *URLService) Shorten(originalURL string) (string, bool, error) {
-	shortID := randomid.GenerateRandomID()
+	shortID := GenerateRandomID()
 	shortID, err := s.Store.Save(shortID, originalURL)
 	if err != nil {
 		return "", false, err
@@ -56,7 +53,7 @@ func (s *URLService) ShortenJSON(originalURL string) (string, bool, error) {
 		return existingShortURL, true, nil
 	}
 
-	shortID := randomid.GenerateRandomID()
+	shortID := GenerateRandomID()
 
 	shortID, err = s.Store.Save(shortID, originalURL)
 	if err != nil {

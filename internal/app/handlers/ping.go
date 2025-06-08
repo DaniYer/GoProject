@@ -1,4 +1,4 @@
-package ping
+package handlers
 
 import (
 	"database/sql"
@@ -17,4 +17,10 @@ func PingDB(db *sql.DB, w http.ResponseWriter) {
 	}
 
 	w.Write([]byte("Связь налажена"))
+}
+
+func PingDBInit(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		PingDB(db, w)
+	}
 }

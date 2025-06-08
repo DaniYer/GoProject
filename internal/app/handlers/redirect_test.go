@@ -1,4 +1,4 @@
-package redirect
+package handlers
 
 import (
 	"context"
