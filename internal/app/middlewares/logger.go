@@ -9,59 +9,74 @@ import (
 
 var sugar *zap.SugaredLogger
 
-// InitLogger инициализирует логгер
+// InitLogger инициализирует глобальный логгер.
+// Вызывается один раз в начале работы приложения.
 func InitLogger(logger *zap.SugaredLogger) {
 	sugar = logger
 }
 
+// WithLogging — middleware для логирования HTTP-запросов.
+// Логирует:
+//   - URI запроса
+//   - HTTP-метод
+//   - код ответа
+//   - время обработки
+//   - размер ответа (в байтах)
 func WithLogging(h http.Handler) http.Handler {
 	logFn := func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
+		// Создаём объект для хранения данных об ответе
 		responseData := &responseData{
 			status: 0,
 			size:   0,
 		}
+
+		// Оборачиваем оригинальный ResponseWriter в наш
 		lw := loggingResponseWriter{
-			ResponseWriter: w, // встраиваем оригинальный http.ResponseWriter
+			ResponseWriter: w,
 			responseData:   responseData,
 		}
-		h.ServeHTTP(&lw, r) // внедряем реализацию http.ResponseWriter
 
+		// Передаём управление следующему обработчику
+		h.ServeHTTP(&lw, r)
+
+		// После завершения — логируем данные
 		duration := time.Since(start)
-
 		sugar.Infoln(
 			"uri", r.RequestURI,
 			"method", r.Method,
-			"status", responseData.status, // получаем перехваченный код статуса ответа
+			"status", responseData.status,
 			"duration", duration,
-			"size", responseData.size, // получаем перехваченный размер ответа
+			"size", responseData.size,
 		)
 	}
+
 	return http.HandlerFunc(logFn)
 }
 
-type (
-	responseData struct {
-		status int
-		size   int
-	}
+// responseData хранит данные об ответе для логирования.
+type responseData struct {
+	status int // код HTTP-статуса
+	size   int // размер тела ответа в байтах
+}
 
-	loggingResponseWriter struct {
-		http.ResponseWriter
-		responseData *responseData
-	}
-)
+// loggingResponseWriter — враппер для ResponseWriter,
+// который перехватывает код статуса и размер ответа.
+type loggingResponseWriter struct {
+	http.ResponseWriter
+	responseData *responseData
+}
 
+// Write перехватывает запись данных, чтобы посчитать размер ответа.
 func (r *loggingResponseWriter) Write(b []byte) (int, error) {
-	// записываем ответ, используя оригинальный http.ResponseWriter
 	size, err := r.ResponseWriter.Write(b)
-	r.responseData.size += size // захватываем размер
+	r.responseData.size += size
 	return size, err
 }
 
+// WriteHeader перехватывает установку HTTP-статуса.
 func (r *loggingResponseWriter) WriteHeader(statusCode int) {
-	// записываем код статуса, используя оригинальный http.ResponseWriter
 	r.ResponseWriter.WriteHeader(statusCode)
-	r.responseData.status = statusCode // захватываем код статуса
+	r.responseData.status = statusCode
 }

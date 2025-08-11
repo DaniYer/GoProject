@@ -3,35 +3,33 @@ package handlers
 import (
 	"net/http"
 
+	"github.com/DaniYer/GoProject.git/internal/app/service"
 	"github.com/go-chi/chi/v5"
 )
 
-// URLStore описывает методы для сохранения и получения URL.
-type URLStore interface {
-	Save(shortURL, originalURL string) (string, error)
-	Get(shortURL string) (string, error)
-}
-
-func NewRedirectToOriginalURL(read URLStore) http.HandlerFunc {
+// NewRedirectToOriginalURL godoc
+// @Summary      Перенаправление по короткой ссылке
+// @Description  Получает оригинальный URL по его короткому идентификатору и делает перенаправление.
+// @Tags         redirect
+// @Param        id   path      string  true  "Короткий идентификатор ссылки"
+// @Success      307  {string}  string  "Temporary Redirect"
+// @Failure      404  {string}  string  "URL not found"
+// @Failure      410  {string}  string  "URL deleted"
+// @Router       /{id} [get]
+func NewRedirectToOriginalURL(svc *service.URLService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		RedirectToOriginalURL(w, r, read)
-	}
-}
-func RedirectToOriginalURL(w http.ResponseWriter, r *http.Request, read URLStore) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Unresolved method", http.StatusBadRequest)
-		return
-	}
-	id := chi.URLParam(r, "id")
-	if id == "" {
-		http.Error(w, "Empty path or not found", http.StatusBadRequest)
-		return
-	}
-	originalURL, err := read.Get(id)
-	if err != nil || originalURL == "" {
-		http.Error(w, "URL not found", http.StatusBadRequest)
-		return
-	}
-	http.Redirect(w, r, originalURL, http.StatusTemporaryRedirect)
+		shortURL := chi.URLParam(r, "id")
 
+		originalURL, err := svc.Store.Get(shortURL)
+		if err != nil {
+			if err.Error() == "gone" {
+				http.Error(w, "URL deleted", http.StatusGone)
+				return
+			}
+			http.Error(w, "URL not found", http.StatusNotFound)
+			return
+		}
+
+		http.Redirect(w, r, originalURL, http.StatusTemporaryRedirect)
+	}
 }
