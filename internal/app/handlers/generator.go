@@ -8,6 +8,19 @@ import (
 	"github.com/DaniYer/GoProject.git/internal/app/service"
 )
 
+// NewGenerateShortURLHandler godoc
+// @Summary      Создать короткую ссылку
+// @Description  Принимает оригинальный URL в теле запроса (в виде текста), возвращает короткую ссылку.
+// @Tags         urls
+// @Accept       plain
+// @Produce      plain
+// @Param        url body string true "Оригинальный URL"
+// @Success      201 {string} string "Короткая ссылка создана"
+// @Failure      400 {string} string "Ошибка чтения тела"
+// @Failure      409 {string} string "Ссылка уже существует"
+// @Failure      500 {string} string "Ошибка сохранения"
+// @Router       / [post]
+
 func NewGenerateShortURLHandler(svc *service.URLService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		GenerateShortURLHandler(w, r, svc)
